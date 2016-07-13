@@ -95,13 +95,23 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
         String loginPage = ConfigurationFacade.getInstance().getAuthenticationEndpointURL().replace(MepinConstants.LOGIN_PAGE,
                                                                                                     MepinConstants.MEPIN_PAGE);
         boolean isSecondStep = false;
+        boolean isLinked=false;
+        String mepinID;
         try {
+            String idpName = context.getExternalIdP().getIdPName();
             String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
             if (StringUtils.isNotEmpty(authenticatedLocalUsername)) {
                 isSecondStep = true;
+                mepinID=getMepinIdAssociatedWithUsername(idpName,authenticatedLocalUsername);
+                if(StringUtils.isNotEmpty(mepinID)){
+                    isLinked=true;
+                }
             }
         } catch (NullPointerException e) {
             log.warn("Username cannot be fetched from previous authentication steps.");
+        } catch (UserProfileException e) {
+            log.error("Unable to associate the user: " + e.getMessage(), e);
+            throw new AuthenticationFailedException("Unable to associate the user: " + e.getMessage(), e);
         }
 
         try {
@@ -113,7 +123,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
                                                              + "&applicationId=" + authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID)
                                                              + "&callbackUrl=" + authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL)
                                                              + "&" + FrameworkConstants.SESSION_DATA_KEY + "=" + context.getContextIdentifier()
-                                                             + "&isSecondStep=" + isSecondStep + retryParam));
+                                                             + "&isSecondStep=" + isSecondStep + "&isLinked=" + isLinked + retryParam));
         } catch (IOException e) {
             if (log.isDebugEnabled()) {
                 log.debug("Error while redirecting");

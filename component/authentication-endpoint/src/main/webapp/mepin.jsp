@@ -136,18 +136,27 @@
 	    String callbackUrl = (String) request.getParameter("callbackUrl");
 	    String sessionDataKey = (String) request.getParameter("sessionDataKey");
 	    String isSecondStep = (String) request.getParameter("isSecondStep");
+        String isLinked = (String) request.getParameter("isLinked");
         %>
 	    <input type='hidden' name='applicationId' id='applicationId' value='<%=applicationId%>'/>
 	    <input type='hidden' name='callbackUrl' id='callbackUrl' value='<%=callbackUrl%>'/>
 	    <input type='hidden' name='sessionDataKey' id='sessionDataKey' value='<%=sessionDataKey%>'/>
-            <input type='hidden' name='isSecondStep' id='isSecondStep' value='<%=isSecondStep%>'/>
+        <input type='hidden' name='isSecondStep' id='isSecondStep' value='<%=isSecondStep%>'/>
+	    <input type='hidden' name='isLinked' id='isLinked' value='<%=isLinked%>'/>
 	    <input type='hidden' name='mepinLogin' id='mepinLogin' value='mepinLogin'/>
 </div>
 </form>
 <script>
 function getLoginDiv() {
     var isSecondStep = document.getElementById("isSecondStep").value;
-    if(isSecondStep == "false") {
+    var isLinked = document.getElementById("isLinked").value;
+    if(isSecondStep == "true"){
+        if(isLinked == "true"){
+            document.getElementById('link').style.display = 'none';
+        }else{
+            document.getElementById('go').style.display = 'none';
+        }
+    }else{
         document.getElementById('loginDiv').style.display = 'inline';
     }
 }
