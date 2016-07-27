@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ *  Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  *  WSO2 Inc. licenses this file to you under the Apache License,
  *  Version 2.0 (the "License"); you may not use this file except
@@ -110,8 +110,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
         } catch (NullPointerException e) {
             log.warn("Username cannot be fetched from previous authentication steps.");
         } catch (UserProfileException e) {
-            log.error("Unable to associate the user: " + e.getMessage(), e);
-            throw new AuthenticationFailedException("Unable to associate the user: " + e.getMessage(), e);
+            log.warn("Unable to retrieve the associated user");
         }
 
         try {

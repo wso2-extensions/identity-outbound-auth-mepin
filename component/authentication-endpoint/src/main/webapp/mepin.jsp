@@ -1,5 +1,5 @@
 <%--
-  ~ Copyright (c) 2015, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+  ~ Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
   ~
   ~ WSO2 Inc. licenses this file to you under the Apache License,
   ~ Version 2.0 (the "License"); you may not use this file except
@@ -124,11 +124,11 @@
             </div>
             </div>
          <div class="form-actions">
-             <input type="button" value="Link with MePIN" class="wr-btn grey-bg col-xs-12 col-md-12 col-lg-12 lowercase font-extra-large" id="link">
+             <input type="button" style="display:none" value="Link with MePIN" class="wr-btn grey-bg col-xs-12 col-md-12 col-lg-12 lowercase font-extra-large" id="link">
          </div>
          <span style="margin-top: 20px; line-height:0.1px; background:white;">&nbsp;</span>
          <div class="form-actions">
-             <input type="button" value="Login with MePIN" class="wr-btn grey-bg col-xs-12 col-md-12 col-lg-12 lowercase font-extra-large" id="go">
+             <input type="button" style="display:none" value="Login with MePIN" class="wr-btn grey-bg col-xs-12 col-md-12 col-lg-12 lowercase font-extra-large" id="go">
          </div>
 
 	<%
@@ -136,12 +136,12 @@
 	    String callbackUrl = (String) request.getParameter("callbackUrl");
 	    String sessionDataKey = (String) request.getParameter("sessionDataKey");
 	    String isSecondStep = (String) request.getParameter("isSecondStep");
-        String isLinked = (String) request.getParameter("isLinked");
+	    String isLinked = (String) request.getParameter("isLinked");
         %>
 	    <input type='hidden' name='applicationId' id='applicationId' value='<%=applicationId%>'/>
 	    <input type='hidden' name='callbackUrl' id='callbackUrl' value='<%=callbackUrl%>'/>
 	    <input type='hidden' name='sessionDataKey' id='sessionDataKey' value='<%=sessionDataKey%>'/>
-        <input type='hidden' name='isSecondStep' id='isSecondStep' value='<%=isSecondStep%>'/>
+	    <input type='hidden' name='isSecondStep' id='isSecondStep' value='<%=isSecondStep%>'/>
 	    <input type='hidden' name='isLinked' id='isLinked' value='<%=isLinked%>'/>
 	    <input type='hidden' name='mepinLogin' id='mepinLogin' value='mepinLogin'/>
 </div>
@@ -152,12 +152,14 @@ function getLoginDiv() {
     var isLinked = document.getElementById("isLinked").value;
     if(isSecondStep == "true"){
         if(isLinked == "true"){
-            document.getElementById('link').style.display = 'none';
+            document.getElementById('go').style.display = 'block';
         }else{
-            document.getElementById('go').style.display = 'none';
+            document.getElementById('link').style.display = 'block';
         }
     }else{
         document.getElementById('loginDiv').style.display = 'inline';
+        document.getElementById('go').style.display = 'block';
+        document.getElementById('link').style.display = 'block';
     }
 }
 $(document).ready(function(){
@@ -175,12 +177,12 @@ $(document).ready(function(){
     	var sessionDataKey = document.getElementById("sessionDataKey").value;
         var isSecondStep = document.getElementById("isSecondStep").value;
     	    if(username!="" && password!="") {
-    	        document.getElementById('errorDiv').innerHTML = '';
-		document.getElementById('enrollmentTable').style.display = 'none';
-    	        document.getElementById('loginTable').innerHTML = '<font style="font-family: Times New Roman, Times, serif; font-size: 20px; color: #006666;">To link with MePIN click </font><div style="float:right;" class="mepin-link" data-theme="light" data-layout="standard" data-applicationid="'+applicationId+'" data-cburl="'+callbackUrl+'?sessionDataKey='+sessionDataKey+'&authHeader='+authHeader+'&isSecondStep='+isSecondStep+'"></div>';
-    	    } else {
-    	         document.getElementById('errorDiv').innerHTML = '<div class="alert alert-danger" id="error-msg">Invalid username or password</div>';
-    	    }
+                $('#errorDiv').empty();
+                $('#enrollmentTable').hide();
+                $('#loginTable').html('<span style="font-family: Times New Roman, Times, serif; font-size: 20px; color: #006666;">To link with MePIN click </span><span class="mepin-link" data-theme="light" data-layout="standard" data-applicationid="'+applicationId+'" data-cburl="'+callbackUrl+'?sessionDataKey='+sessionDataKey+'&authHeader='+authHeader+'&isSecondStep='+isSecondStep+'"></span>');
+            } else {
+                $('#errorDiv').html('<div class="alert alert-danger" id="error-msg">Invalid username or password</div>');
+            }
     	});
     });
     </script>
