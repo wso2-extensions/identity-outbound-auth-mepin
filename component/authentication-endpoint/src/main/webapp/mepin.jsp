@@ -60,17 +60,25 @@
         <link href="libs/bootstrap_3.3.5/css/bootstrap.min.css" rel="stylesheet">
         <link href="css/Roboto.css" rel="stylesheet">
         <link href="css/custom-common.css" rel="stylesheet">
-
-        <script src="js/scripts.js"></script>
         <script src="assets/js/jquery-1.7.1.min.js"></script>
-	<script src="https://mepin.com/javascripts/mepinlogin.js"></script>
+
+        <script type="text/javascript">
+               (function(){
+                 var newscript = document.createElement('script');
+                    newscript.type = 'text/javascript';
+                    newscript.async = true;
+                    newscript.src = 'js/scripts.js';
+                 (document.getElementsByTagName('head')[0]||document.getElementsByTagName('body')[0]).appendChild(newscript);
+               })();
+        </script>
+	    <script src="https://mepin.com/javascripts/mepinlogin.js"></script>
         <!--[if lt IE 9]>
         <script src="js/html5shiv.min.js"></script>
         <script src="js/respond.min.js"></script>
         <![endif]-->
     </head>
 
-    <body onload="getLoginDiv()">
+    <body onload="getLoginDiv()" class="sticky-footer">
 
     <!-- header -->
     <header class="header header-default">
@@ -132,11 +140,11 @@
          </div>
 
 	<%
-	    String applicationId = (String) request.getParameter("applicationId");
-	    String callbackUrl = (String) request.getParameter("callbackUrl");
-	    String sessionDataKey = (String) request.getParameter("sessionDataKey");
-	    String isSecondStep = (String) request.getParameter("isSecondStep");
-	    String isLinked = (String) request.getParameter("isLinked");
+                   String applicationId = (String) request.getParameter("applicationId");
+                   String callbackUrl = (String) request.getParameter("callbackUrl");
+                   String sessionDataKey = (String) request.getParameter("sessionDataKey");
+                   String isSecondStep = (String) request.getParameter("isSecondStep");
+                   String isLinked = (String) request.getParameter("isLinked");
         %>
 	    <input type='hidden' name='applicationId' id='applicationId' value='<%=applicationId%>'/>
 	    <input type='hidden' name='callbackUrl' id='callbackUrl' value='<%=callbackUrl%>'/>
@@ -149,18 +157,18 @@
 <script>
 function getLoginDiv() {
     var isSecondStep = document.getElementById("isSecondStep").value;
-    var isLinked = document.getElementById("isLinked").value;
-    if(isSecondStep == "true"){
-        if(isLinked == "true"){
-            document.getElementById('go').style.display = 'block';
-        }else{
-            document.getElementById('link').style.display = 'block';
-        }
-    }else{
-        document.getElementById('loginDiv').style.display = 'inline';
-        document.getElementById('go').style.display = 'block';
-        document.getElementById('link').style.display = 'block';
-    }
+   var isLinked = document.getElementById("isLinked").value;
+   <% if("true".equals(isSecondStep)){%>
+     <%  if("true".equals(isLinked)){%>
+           document.getElementById('go').style.display = 'block';
+      <% }else{%>
+           document.getElementById('link').style.display = 'block';
+      <% }%>
+   <%}else{%>
+       document.getElementById('loginDiv').style.display = 'inline';
+       document.getElementById('go').style.display = 'block';
+       document.getElementById('link').style.display = 'block';
+   <%}%>
 }
 $(document).ready(function(){
    $('[data-toggle="tooltip"]').tooltip();
@@ -169,41 +177,22 @@ $(document).ready(function(){
   <div id="loginTable" class="identity-box"></div>
 <script src="http://code.jquery.com/jquery-1.10.2.js" type="text/javascript"></script>
     <script type="text/javascript">
-    $(document).ready(function() {
-    	$('#link').click(function() {
-    	var authHeader = btoa(document.getElementById("username").value+":"+document.getElementById("password").value);
-    	var applicationId = document.getElementById("applicationId").value;
-    	var callbackUrl = document.getElementById("callbackUrl").value;
-    	var sessionDataKey = document.getElementById("sessionDataKey").value;
-        var isSecondStep = document.getElementById("isSecondStep").value;
-    	    if(username!="" && password!="") {
-                $('#errorDiv').empty();
-                $('#enrollmentTable').hide();
-                $('#loginTable').html('<span style="font-family: Times New Roman, Times, serif; font-size: 20px; color: #006666;">To link with MePIN click </span><span class="mepin-link" data-theme="light" data-layout="standard" data-applicationid="'+applicationId+'" data-cburl="'+callbackUrl+'?sessionDataKey='+sessionDataKey+'&authHeader='+authHeader+'&isSecondStep='+isSecondStep+'"></span>');
-            } else {
-                $('#errorDiv').html('<div class="alert alert-danger" id="error-msg">Invalid username or password</div>');
-            }
-    	});
-    });
+       (function(){
+         var newscript = document.createElement('script');
+            newscript.type = 'text/javascript';
+            newscript.async = true;
+            newscript.src = 'js/link.js';
+         (document.getElementsByTagName('head')[0]||document.getElementsByTagName('body')[0]).appendChild(newscript);
+       })();
     </script>
     <script type="text/javascript">
-    $(document).ready(function() {
-    	$('#go').click(function() {
-        var isSecondStep = document.getElementById("isSecondStep").value;
-    	if(isSecondStep == "true") {
-            $('#enrollmentForm').submit();
-        } else {
-    	var username = document.getElementById("username").value;
-    	var password = document.getElementById("password").value;
-    	if(username!="" && password!="") {
-    	    $('#enrollmentForm').submit();
-            document.getElementById('errorDiv').innerHTML = '';
-        } else {
-            document.getElementById('errorDiv').innerHTML = '<div class="alert alert-danger" id="error-msg">Invalid username or password</div>';
-        }
-        }
-    	});
-    });
+        (function(){
+          var newscript = document.createElement('script');
+             newscript.type = 'text/javascript';
+             newscript.async = true;
+             newscript.src = 'js/go.js';
+          (document.getElementsByTagName('head')[0]||document.getElementsByTagName('body')[0]).appendChild(newscript);
+        })();
     </script>
                            <div class="clearfix"></div>
                         </div>
