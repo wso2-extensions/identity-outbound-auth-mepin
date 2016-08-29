@@ -16,27 +16,20 @@
  * under the License.
  */
 
-$(document).ready(function(){
-    $('#authorizeLink').click(function(){
-        $('#loginForm').show('slow');
+$(document).ready(function() {
+    $('#go').click(function() {
+    var isSecondStep = document.getElementById("isSecondStep").value;
+    if(isSecondStep == "true") {
+        $('#enrollmentForm').submit();
+    } else {
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    if(username!="" && password!="") {
+        $('#enrollmentForm').submit();
+        document.getElementById('errorDiv').innerHTML = '';
+    } else {
+        document.getElementById('errorDiv').innerHTML = '<div class="alert alert-danger" id="error-msg">Invalid username or password</div>';
+    }
+    }
     });
-	$('#loginBtn').click(function(){
-			var error = "";
-			if($('#oauth_user_name').val() == ""){
-				error += '<div>Username field is empty.</div>';
-			}
-			if($('#oauth_user_password').val() == ""){
-				error += '<div>Password field is empty.</div>';
-			}
-			if(error == ""){
-				$('#errorMsg').hide('slow');
-				$('#loginForm').submit();
-				
-			}else{				
-				$('#errorMsg').html(error).show('slow');
-			}
-	});
-	$('#denyLink').click(function(){
-			$('#denyForm').submit();
-	});
 });
