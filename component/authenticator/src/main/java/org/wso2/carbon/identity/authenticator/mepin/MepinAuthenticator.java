@@ -115,11 +115,11 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
             if (context.isRetrying()) {
                 retryParam = "&authFailure=true&authFailureMsg=authentication.fail.message";
             }
-            response.sendRedirect(response.encodeRedirectURL(loginPage + "?authenticators=" + getName()
+            response.sendRedirect(loginPage + "?authenticators=" + getName()
                     + "&applicationId=" + authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID)
                     + "&callbackUrl=" + authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL)
                     + "&" + FrameworkConstants.SESSION_DATA_KEY + "=" + context.getContextIdentifier()
-                    + "&isSecondStep=" + isSecondStep + "&isLinked=" + isLinked + retryParam));
+                    + "&isSecondStep=" + isSecondStep + "&isLinked=" + isLinked + retryParam);
         } catch (IOException e) {
             if (log.isDebugEnabled()) {
                 log.debug("Error while redirecting");
