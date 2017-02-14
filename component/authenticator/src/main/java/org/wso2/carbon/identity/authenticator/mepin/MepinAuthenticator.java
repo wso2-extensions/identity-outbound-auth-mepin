@@ -101,7 +101,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
             String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
             if (StringUtils.isNotEmpty(authenticatedLocalUsername)) {
                 isSecondStep = true;
-                mepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername);
+                mepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername, context);
                 if (StringUtils.isNotEmpty(mepinID)) {
                     isLinked = true;
                 }
@@ -266,14 +266,14 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
                     String mepinId = responseJson.getAsJsonPrimitive(MepinConstants.MEPIN_ID).getAsString();
                     String idpName = context.getExternalIdP().getIdPName();
                     String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
-                    String associatedMepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername);
+                    String associatedMepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername, context);
                     if (StringUtils.isEmpty(associatedMepinID)) {
                         associateFederatedIdToLocalUsername(username, context,
                                 getFederateAuthenticatedUser(context, mepinId));
                         context.setSubject(AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(username));
                     } else {
                         log.error("Trying to hack the mepinId " + mepinId + " of the " +
-                                  username + " User with the mepinId " + associatedMepinID);
+                                username + " User with the mepinId " + associatedMepinID);
                         return;
                     }
                 } else {
@@ -310,7 +310,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
             try {
                 String idpName = context.getExternalIdP().getIdPName();
                 String mePinId;
-                mePinId = getMepinIdAssociatedWithUsername(idpName, username);
+                mePinId = getMepinIdAssociatedWithUsername(idpName, username, context);
                 if (StringUtils.isEmpty(mePinId)) {
                     log.error("First, You need to Link with Mepin");
                     return;
@@ -487,7 +487,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
                         idpName = context.getExternalIdP().getIdPName();
                         stepConfig.setAuthenticatedIdP(idpName);
                         associateID(idpName,
-                                originalExternalIdpSubjectValueForThisStep, authenticatedLocalUsername);
+                                originalExternalIdpSubjectValueForThisStep, authenticatedLocalUsername, context);
                         stepConfig.setAuthenticatedUser(authenticatedUser);
                         context.getSequenceConfig().getStepMap().put(i, stepConfig);
                     } catch (UserProfileException e) {
@@ -500,12 +500,13 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
         }
     }
 
-    private void associateID(String idpID, String associatedID, String userName)
+    private void associateID(String idpID, String associatedID, String userName, AuthenticationContext context)
             throws UserProfileException {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         String sql;
-        int tenantID = CarbonContext.getThreadLocalCarbonContext().getTenantId();
+        String tenantDomain = context.getTenantDomain();
+        int tenantID = IdentityTenantUtil.getTenantId(tenantDomain);
         String tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
         String domainName = getDomainName(tenantAwareUsername);
         tenantAwareUsername = getUsernameWithoutDomain(tenantAwareUsername);
@@ -540,15 +541,15 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
         return index < 0 ? username : username.substring(index + 1, username.length());
     }
 
-    public String getMepinIdAssociatedWithUsername(String idpID, String username)
+    public String getMepinIdAssociatedWithUsername(String idpID, String username, AuthenticationContext context)
             throws UserProfileException {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet;
         String sql;
         String mepinId;
-        int tenantID = CarbonContext.getThreadLocalCarbonContext().getTenantId();
-
+        String tenantDomain = context.getTenantDomain();
+        int tenantID = IdentityTenantUtil.getTenantId(tenantDomain);
         try {
             sql = "SELECT IDP_USER_ID  FROM IDN_ASSOCIATED_ID WHERE TENANT_ID = ? AND IDP_ID = (SELECT ID " +
                     "FROM IDP WHERE NAME = ? AND TENANT_ID = ?) AND USER_NAME = ?";
