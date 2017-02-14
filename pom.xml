@@ -25,8 +25,8 @@
         <version>1</version>
     </parent>
 
-    <groupId>org.wso2.carbon.extension.identity.authenticator</groupId>
-    <artifactId>org.wso2.carbon.extension.identity.authenticator.mepin</artifactId>
+    <groupId>org.wso2.carbon.extension.identity.authenticator.outbound.mepin</groupId>
+    <artifactId>identity-outbound-auth-mepin</artifactId>
     <version>1.0.2-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>WSO2 Carbon Extension - Mepin Pom</name>
