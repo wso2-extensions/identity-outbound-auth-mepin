@@ -163,7 +163,6 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             boolean isUserExists = FederatedAuthenticatorUtil.isUserExistInUserStore(username);
             String queryParams = FrameworkUtils.getQueryStringWithFrameworkContextId(context.getQueryParams(),
                     context.getCallerSessionKey(), context.getContextIdentifier());
-            String errorPage = getErrorPage(context);
             // Mepin authentication is mandatory and user doesn't disable Mepin claim in user's profile.
             if (isMepinMandatory) {
                 processMepinMandatoryCase(context, authenticatorProperties, response, queryParams, username,
@@ -314,11 +313,10 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      */
     protected void proceedWithMepin(HttpServletResponse response, Map<String, String> authenticatorProperties,
                                     AuthenticationContext context) throws AuthenticationFailedException {
-        String loginPage = ConfigurationFacade.getInstance().getAuthenticationEndpointURL().replace(
-                MepinConstants.LOGIN_PAGE, MepinConstants.MEPIN_PAGE);
         boolean isSecondStep = false;
         boolean isLinked = false;
         String mepinID;
+        String loginPage = getLoginPage(context);
         try {
             String idpName = context.getExternalIdP().getIdPName();
             String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
@@ -349,6 +347,25 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             }
             throw new AuthenticationFailedException("Error while redirecting the MePIN", e);
         }
+    }
+
+    /**
+     * Get the loginPage from authentication.xml file or use the login page from constant file.
+     *
+     * @param context the AuthenticationContext
+     * @return the loginPage
+     * @throws AuthenticationFailedException
+     */
+    private String getLoginPage(AuthenticationContext context) throws AuthenticationFailedException {
+        String loginPage = MepinUtils.getLoginPageFromXMLFile(context);
+        if (StringUtils.isEmpty(loginPage)) {
+            loginPage = ConfigurationFacade.getInstance().getAuthenticationEndpointURL()
+                    .replace(MepinConstants.LOGIN_PAGE, MepinConstants.MEPIN_PAGE);
+            if (log.isDebugEnabled()) {
+                log.debug("Default authentication endpoint context is used");
+            }
+        }
+        return loginPage;
     }
 
     /**
