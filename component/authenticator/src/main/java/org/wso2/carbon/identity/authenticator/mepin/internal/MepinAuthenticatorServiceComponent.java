@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ *  Copyright (c) 2017, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  *  WSO2 Inc. licenses this file to you under the Apache License,
  *  Version 2.0 (the "License"); you may not use this file except
@@ -36,6 +36,11 @@ public class MepinAuthenticatorServiceComponent {
 
     private static Log log = LogFactory.getLog(MepinAuthenticatorServiceComponent.class);
 
+    public static RealmService getRealmService() {
+        return (RealmService) PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                .getOSGiService(RealmService.class);
+    }
+
     protected void activate(ComponentContext ctxt) {
         try {
             MepinAuthenticator authenticator = new MepinAuthenticator();
@@ -54,10 +59,5 @@ public class MepinAuthenticatorServiceComponent {
         if (log.isDebugEnabled()) {
             log.debug("MePIN authenticator is deactivated");
         }
-    }
-
-    public static RealmService getRealmService() {
-        return (RealmService) PrivilegedCarbonContext.getThreadLocalCarbonContext()
-                .getOSGiService(RealmService.class);
     }
 }

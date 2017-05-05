@@ -16,7 +16,8 @@
  ~ specific language governing permissions and limitations
  ~ under the License.
 	 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -58,7 +59,7 @@
             <artifactId>org.wso2.carbon.logging</artifactId>
             <version>${commons-logging.version}</version>
         </dependency>
-        <dependency>   
+        <dependency>
             <groupId>org.wso2.carbon.identity</groupId>
             <artifactId>org.wso2.carbon.identity.application.common</artifactId>
             <version>${carbon.identity.version}</version>
@@ -151,7 +152,7 @@
             <artifactId>json</artifactId>
             <version>${wso2.json}</version>
         </dependency>
-       <dependency>
+        <dependency>
             <groupId>commons-lang.wso2</groupId>
             <artifactId>commons-lang</artifactId>
             <version>${commons-lang.wso2.version}</version>
@@ -198,7 +199,8 @@
     <scm>
         <connection>scm:git:https://github.com/wso2-extensions/identity-outbound-auth-mepin.git</connection>
         <url>https://github.com/wso2-extensions/identity-outbound-auth-mepin.git</url>
-        <developerConnection>scm:git:https://github.com/wso2-extensions/identity-outbound-auth-mepin.git</developerConnection>
+        <developerConnection>scm:git:https://github.com/wso2-extensions/identity-outbound-auth-mepin.git
+        </developerConnection>
         <tag>HEAD</tag>
     </scm>
 
@@ -392,5 +394,8 @@
         <org.wso2.securevault.version>1.0.0-wso2v2</org.wso2.securevault.version>
         <commons-lang.wso2.version>2.6.0.wso2v1</commons-lang.wso2.version>
         <encoder.wso2.version>1.2.0.wso2v1</encoder.wso2.version>
+        <carbon.identity.package.export.project.version>${project.version}
+        </carbon.identity.package.export.project.version>
+        <identity.extension.utils>1.0.4</identity.extension.utils>
     </properties>
 </project>
