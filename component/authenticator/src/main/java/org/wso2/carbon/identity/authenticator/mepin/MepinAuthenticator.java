@@ -508,9 +508,9 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                 throw new AuthenticationFailedException("Unable to get the MePIN ID.");
             }
         } catch (ApplicationAuthenticatorException e) {
-            throw new AuthenticationFailedException("Unable to set the subject: " + e.getMessage(), e);
+            throw new AuthenticationFailedException("Unable to set the subject", e);
         } catch (UserProfileException e) {
-            throw new AuthenticationFailedException("Unable to associate the user: " + e.getMessage(), e);
+            throw new AuthenticationFailedException("Unable to associate the user", e);
         }
     }
 
@@ -630,9 +630,9 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                 throw new AuthenticationFailedException("Error while creating the MePIN transaction");
             }
         } catch (UserProfileException e) {
-            throw new AuthenticationFailedException("Unable to get the associated user: " + e.getMessage(), e);
+            throw new AuthenticationFailedException("Unable to get the associated user ", e);
         } catch (IOException e) {
-            throw new AuthenticationFailedException("Unable to create the MePIN transaction: " + e.getMessage(), e);
+            throw new AuthenticationFailedException("Unable to create the MePIN transaction ", e);
         }
     }
 
@@ -675,7 +675,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                         throw new AuthenticationFailedException("Authentication Failed: Invalid username or password");
                     }
                 } catch (UserStoreException e) {
-                    throw new AuthenticationFailedException("Unable to get the user store manager: " + e.getMessage(), e);
+                    throw new AuthenticationFailedException("Unable to get the user store manager ", e);
                 }
             }
             processLoginWithMepin(context, authenticatorProperties, username);
