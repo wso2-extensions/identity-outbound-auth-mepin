@@ -21,7 +21,6 @@ package org.wso2.carbon.identity.authenticator.mepin;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.extension.identity.helper.IdentityHelperConstants;
 import org.wso2.carbon.identity.application.authentication.framework.config.builder.FileBasedConfigurationBuilder;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.AuthenticatorConfig;
@@ -59,8 +58,8 @@ public class MepinUtils {
      * @return true or false
      * @throws MepinException
      */
-    public static boolean isMepinDisableForLocalUser(String username, AuthenticationContext context,
-                                                     String authenticatorName) throws MepinException {
+    public static boolean isMepinDisableForLocalUser(String username, AuthenticationContext context)
+            throws MepinException {
         UserRealm userRealm;
         try {
             String tenantDomain = MultitenantUtils.getTenantDomain(username);
@@ -68,7 +67,7 @@ public class MepinUtils {
             RealmService realmService = IdentityTenantUtil.getRealmService();
             userRealm = realmService.getTenantUserRealm(tenantId);
             username = MultitenantUtils.getTenantAwareUsername(String.valueOf(username));
-            boolean isEnableORDisableLocalUserClaim = isMepinEnableOrDisableByUser(context, authenticatorName);
+            boolean isEnableORDisableLocalUserClaim = isMepinDisableByUser(context);
             if (userRealm != null) {
                 if (isEnableORDisableLocalUserClaim) {
                     String isMepinEnabledByUser = userRealm.getUserStoreManager().getUserClaimValue(username,
@@ -76,8 +75,7 @@ public class MepinUtils {
                     return Boolean.parseBoolean(isMepinEnabledByUser);
                 }
             } else {
-                throw new MepinException("Cannot find the user realm for the given tenant domain : " + CarbonContext
-                        .getThreadLocalCarbonContext().getTenantDomain());
+                throw new MepinException("Cannot find the user realm for the given tenant domain : " + tenantDomain);
             }
         } catch (UserStoreException e) {
             throw new MepinException("Failed while trying to access userRealm of the user : " + username, e);
@@ -88,23 +86,23 @@ public class MepinUtils {
     /**
      * Check whether Mepin is mandatory or not.
      *
-     * @param context           the AuthenticationContext
-     * @param authenticatorName the name of the authenticator
-     * @return true or false
+     * @param context the authentication context
+     * @return status of user's mepin authentication
      */
-    public static boolean isMepinMandatory(AuthenticationContext context, String authenticatorName) {
-        Object propertiesFromLocal = null;
+    public static boolean isMepinMandatory(AuthenticationContext context) {
         boolean isMepinMandatory = false;
         String tenantDomain = context.getTenantDomain();
-        if (!tenantDomain.equals(MepinConstants.SUPER_TENANT)) {
-            propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
-        }
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
         if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
                 getMepinParameters().containsKey(MepinConstants.IS_MEPIN_MANDATORY)) {
-            isMepinMandatory = Boolean.parseBoolean(getMepinParameters().get(MepinConstants.IS_MEPIN_MANDATORY));
+            isMepinMandatory = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_MANDATORY));
         } else if ((context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)) != null) {
             isMepinMandatory = Boolean.parseBoolean(String.valueOf
                     (context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is mandatory : " + isMepinMandatory);
         }
         return isMepinMandatory;
     }
@@ -112,69 +110,70 @@ public class MepinUtils {
     /**
      * Check whether user enable the second factor or not.
      *
-     * @param context           the AuthenticationContext
-     * @param authenticatorName the name of the authenticator
-     * @return true or false
+     * @param context the authentication context
+     * @return status of user's mepin authentication
      */
-    public static boolean isMepinEnableOrDisableByUser(AuthenticationContext context, String authenticatorName) {
-        Object propertiesFromLocal = null;
-        boolean isMepinEnableByUser = false;
+    public static boolean isMepinDisableByUser(AuthenticationContext context) {
+        boolean isMepinDisableByUser = false;
         String tenantDomain = context.getTenantDomain();
-        if (!tenantDomain.equals(MepinConstants.SUPER_TENANT)) {
-            propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
-        }
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
         if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
                 getMepinParameters().containsKey(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) {
-            isMepinEnableByUser = Boolean.parseBoolean(getMepinParameters().get(MepinConstants.IS_MEPIN_ENABLE_BY_USER));
+            isMepinDisableByUser = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_ENABLE_BY_USER));
         } else if ((context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) != null) {
-            isMepinEnableByUser = Boolean.parseBoolean(String.valueOf(context.getProperty
-                    (MepinConstants.IS_MEPIN_ENABLE_BY_USER)));
+            isMepinDisableByUser = Boolean.parseBoolean(String.valueOf
+                    (context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)));
         }
-        return isMepinEnableByUser;
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is disabled by user : " + isMepinDisableByUser);
+        }
+        return isMepinDisableByUser;
     }
 
     /**
      * Get the error page url from the application-authentication.xml file.
      *
-     * @param context           the AuthenticationContext
-     * @param authenticatorName the name of the authenticator
-     * @return errorPage
+     * @param context the authentication context
+     * @return the error page
      */
-    public static String getErrorPageFromXMLFile(AuthenticationContext context, String authenticatorName) {
-        Object propertiesFromLocal = null;
+    public static String getErrorPageFromXMLFile(AuthenticationContext context) {
         String errorPage = null;
         String tenantDomain = context.getTenantDomain();
-        if (!tenantDomain.equals(MepinConstants.SUPER_TENANT)) {
-            propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
-        }
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
         if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
                 getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) {
             errorPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL);
         } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) != null) {
-            errorPage = String.valueOf(context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL));
+            errorPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The error page is " + errorPage);
         }
         return errorPage;
     }
 
     /**
-     * Get the login page url from the application-authentication.xml file.
+     * Get the mepin page url from the application-authentication.xml file.
      *
      * @param context the AuthenticationContext
-     * @return loginPage
+     * @return mepin page
      */
-    public static String getLoginPageFromXMLFile(AuthenticationContext context) {
-        Object propertiesFromLocal = null;
-        String loginPage = null;
+    public static String getMepinPageFromXMLFile(AuthenticationContext context) {
+        String mepinPage = null;
         String tenantDomain = context.getTenantDomain();
-        if (!tenantDomain.equals(MepinConstants.SUPER_TENANT)) {
-            propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
-        }
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
         if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
                 getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) {
-            loginPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL);
+            mepinPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL);
         } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) != null) {
-            loginPage = String.valueOf(context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL));
+            mepinPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL));
         }
-        return loginPage;
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin page is " + mepinPage);
+        }
+        return mepinPage;
     }
 }

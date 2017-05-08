@@ -81,5 +81,6 @@ public class MepinConstants {
     public static final String ERROR_PAGE = "mepinauthenticationendpoint/mepinError.jsp";
     public static final String NAME_OF_AUTHENTICATORS = "authenticators=";
     public static final String ERROR_MEPIN_DISABLE = "&authFailure=true&authFailureMsg=mepin.disable";
-    public static final String PRIMARY = "PRIMARY";
+    public static final String MEPIN_ID_CLAIM = "http://wso2.org/claims/identity/mepinid";
+    public static final String ACCESS_TOKEN_QUERY_PARAM = "access_token=%s";
 }

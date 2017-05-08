@@ -63,7 +63,6 @@ public class MepinTransactions {
         if (log.isDebugEnabled()) {
             log.debug("Started handling transaction creation");
         }
-
         String query = String.format(MepinConstants.MEPIN_QUERY, URLEncoder.encode(sessionID, MepinConstants.CHARSET),
                 URLEncoder.encode(shortMessage, MepinConstants.CHARSET),
                 URLEncoder.encode(header, MepinConstants.CHARSET), URLEncoder.encode(message, MepinConstants.CHARSET),
@@ -72,7 +71,6 @@ public class MepinTransactions {
                 URLEncoder.encode(callbackUrl, MepinConstants.CHARSET),
                 URLEncoder.encode(confirmationPolicy, MepinConstants.CHARSET)
         );
-
         String response = postRequest(url, query, username, password);
         if (log.isDebugEnabled()) {
             log.debug("MePin JSON Response: " + response);
@@ -115,10 +113,6 @@ public class MepinTransactions {
                     case 200:
                         responseString = getResponse(connection.getInputStream());
                         break;
-                    case 201:
-                    case 400:
-                    case 403:
-                    case 404:
                     case 500:
                         responseString = getResponse(connection.getErrorStream());
                         return MepinConstants.FAILED;
@@ -199,6 +193,9 @@ public class MepinTransactions {
         InputStream inputStream = null;
         url = url + "?transaction_id=" + URLEncoder.encode(transactionId, MepinConstants.CHARSET) + "&client_id="
                 + URLEncoder.encode(clientId, MepinConstants.CHARSET);
+        if (log.isDebugEnabled()) {
+            log.debug("The transaction url is " + url);
+        }
         try {
             urlConnection = new URL(url).openConnection();
             if (urlConnection instanceof HttpsURLConnection) {
@@ -246,7 +243,7 @@ public class MepinTransactions {
     }
 
     /**
-     * Get user information.
+     * Get user information from mepin authenticated user.
      *
      * @param username    the user name
      * @param password    the password
@@ -258,27 +255,32 @@ public class MepinTransactions {
             throws AuthenticationFailedException {
         String responseString = "";
         HttpsURLConnection connection = null;
+        URLConnection urlConnection;
         String authStr = username + ":" + password;
         String encoding = new String(Base64.encodeBase64(authStr.getBytes()));
         try {
-            String query = String.format("access_token=%s", URLEncoder.encode(accessToken, MepinConstants.CHARSET));
-            connection = (HttpsURLConnection) new URL(MepinConstants.MEPIN_GET_USER_INFO_URL + "?" + query).openConnection();
-            connection.setRequestMethod(MepinConstants.HTTP_GET);
-            connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_CONTENT_TYPE);
-            connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC + encoding);
-            int status = connection.getResponseCode();
-            if (log.isDebugEnabled()) {
-                log.debug("MePIN Response Code :" + status);
-            }
-            if (status == 200) {
-                responseString = getResponse(connection.getInputStream());
-            } else {
-                return MepinConstants.FAILED;
+            String query = String.format(MepinConstants.ACCESS_TOKEN_QUERY_PARAM, URLEncoder.encode(accessToken,
+                    MepinConstants.CHARSET));
+            urlConnection = new URL(MepinConstants.MEPIN_GET_USER_INFO_URL + "?" + query).openConnection();
+            if (urlConnection instanceof HttpsURLConnection) {
+                connection = (HttpsURLConnection) urlConnection;
+                connection.setRequestMethod(MepinConstants.HTTP_GET);
+                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_CONTENT_TYPE);
+                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC
+                        + encoding);
+                int status = connection.getResponseCode();
+                if (log.isDebugEnabled()) {
+                    log.debug("MePIN Response Code :" + status);
+                }
+                if (status == 200) {
+                    responseString = getResponse(connection.getInputStream());
+                } else {
+                    return MepinConstants.FAILED;
+                }
             }
         } catch (IOException e) {
-            throw new AuthenticationFailedException("Error while get user information", e);
+            throw new AuthenticationFailedException("Error while get user information from mepin ", e);
         } finally {
-
             if (connection != null) {
                 connection.disconnect();
             }
