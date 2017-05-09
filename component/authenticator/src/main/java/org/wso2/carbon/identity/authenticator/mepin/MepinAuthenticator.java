@@ -22,7 +22,6 @@ package org.wso2.carbon.identity.authenticator.mepin;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -45,7 +44,6 @@ import org.wso2.carbon.identity.application.authentication.framework.util.Framew
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.authenticator.mepin.exception.MepinException;
-import org.wso2.carbon.identity.authenticator.mepin.internal.MepinAuthenticatorServiceComponent;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
@@ -263,7 +261,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
         String authenticationEndpointURL;
         if (StringUtils.isEmpty(errorPage)) {
             authenticationEndpointURL = ConfigurationFacade.getInstance().getAuthenticationEndpointURL();
-            errorPage= authenticationEndpointURL.replace(MepinConstants.LOGIN_PAGE, MepinConstants.ERROR_PAGE);
+            errorPage = authenticationEndpointURL.replace(MepinConstants.LOGIN_PAGE, MepinConstants.ERROR_PAGE);
             if (log.isDebugEnabled()) {
                 log.debug("The default authentication endpoint URL " + authenticationEndpointURL +
                         "is replaced by default the mepin error page context " + errorPage);
@@ -284,7 +282,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      * @throws AuthenticationFailedException
      */
     private void proceedWithMepin(HttpServletResponse response, Map<String, String> authenticatorProperties,
-                                    AuthenticationContext context, String userName) throws AuthenticationFailedException {
+                                  AuthenticationContext context, String userName) throws AuthenticationFailedException {
         boolean isSecondStep = false;
         boolean isLinked = false;
         String mepinID;
@@ -464,35 +462,6 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
     }
 
     /**
-     * Check whether authenticated user or not.
-     *
-     * @param request the Http Servlet Request
-     * @return Authenticated User or not
-     * @throws AuthenticationFailedException
-     */
-    protected boolean isAuthenticatedUser(HttpServletRequest request) throws AuthenticationFailedException {
-        String authHeader = request.getParameter(MepinConstants.AUTH_HEADER);
-        String username;
-        String password;
-        UserStoreManager userStoreManager;
-        authHeader = new String(Base64.decodeBase64(authHeader.getBytes()));
-        int index = authHeader.indexOf(":");
-        username = authHeader.substring(0, index);
-        password = authHeader.substring(index + 1, authHeader.length());
-        int tenantId = IdentityTenantUtil.getTenantIdOfUser(username);
-        boolean isAuthenticated;
-        try {
-            userStoreManager = (UserStoreManager) MepinAuthenticatorServiceComponent.
-                    getRealmService().getTenantUserRealm(tenantId).getUserStoreManager();
-            isAuthenticated = userStoreManager.authenticate(
-                    MultitenantUtils.getTenantAwareUsername(username), password);
-        } catch (UserStoreException e) {
-            throw new AuthenticationFailedException("Unable to get the user store manager", e);
-        }
-        return isAuthenticated;
-    }
-
-    /**
      * Process the Mepin association flow.
      *
      * @param authenticatorProperties the authentication properties
@@ -659,17 +628,11 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
     protected void processAuthenticationResponse(HttpServletRequest request, HttpServletResponse response,
                                                  AuthenticationContext context) throws AuthenticationFailedException {
         String username = null;
-        boolean isAuthenticated;
         Map<String, String> authenticatorProperties = context.getAuthenticatorProperties();
         if ((!StringUtils.isEmpty(request.getParameter(MepinConstants.IS_SECOND_STEP))
                 && !StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN)))) {
             if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
                 username = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
-            } else {
-                isAuthenticated = isAuthenticatedUser(request);
-                if (!isAuthenticated) {
-                    throw new AuthenticationFailedException("Authentication Failed: Invalid username or password");
-                }
             }
             processAssociationFlow(request, authenticatorProperties, context, username);
         } else if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
