@@ -178,13 +178,16 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             log.debug("Mepin authentication is enabled by admin: " + isMepinEnabledByAdmin);
         }
         if (isMepinDisabledUser && isMepinEnabledByAdmin) {
-            //Redirecting to ErrorPage.
+        /*If the parameter MepinMandatory is true, the parameter MepinEnableByUserClaim is true
+        and the user disables the Mepin authenticator using the claim, the authentication is failed .*/
             redirectToErrorPage(response, context, queryParams, MepinConstants.ERROR_MEPIN_DISABLE);
         } else if (isMepinDisabledUser) {
-            //The authentication flow happens with first step authentication.
+        /*If the parameter MepinMandatory is false and the parameter MepinEnableByUserClaim is true
+        and the user disables the Mepin authenticator using the claim, the authentication flow happens
+        with first step authentication.*/
             processFirstStepOnly(authenticatedUser, context);
         } else {
-            //Proceed with Mepin two factor authentication.
+        /* In other cases, the authentication flow happens with Mepin two factor authentication.*/
             proceedWithMepin(response, authenticatorProperties, context, username);
         }
     }
