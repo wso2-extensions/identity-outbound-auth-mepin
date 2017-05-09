@@ -61,8 +61,6 @@ public class MepinConstants {
     public static final String HTTP_POST_CONTENT_TYPE = "application/x-www-form-urlencoded;charset=UTF-8";
     public static final String CHARSET = "UTF-8";
     public static final String HTTP_ACCEPT_CHARSET = "Accept-Charset";
-    public static final String USERNAME = "username";
-    public static final String PASSWORD = "password";
     public static final String TRUE = "true";
     public static final String FAILED = "Failed";
     public static final String AUTH_HEADER = "authHeader";

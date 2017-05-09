@@ -27,12 +27,15 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.extension.identity.helper.FederatedAuthenticatorUtil;
+import org.wso2.carbon.extension.identity.helper.IdentityHelperConstants;
 import org.wso2.carbon.extension.identity.helper.util.IdentityHelperUtil;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorFlowStatus;
 import org.wso2.carbon.identity.application.authentication.framework.FederatedApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.LocalApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.config.ConfigurationFacade;
+import org.wso2.carbon.identity.application.authentication.framework.config.builder.FileBasedConfigurationBuilder;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.AuthenticatorConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.StepConfig;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.AuthenticationFailedException;
@@ -65,6 +68,15 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
 
     private static final long serialVersionUID = -8948601002969608129L;
     private static final Log log = LogFactory.getLog(MepinAuthenticator.class);
+
+    /**
+     * Get parameter values from application-authentication.xml local file.
+     */
+    public static Map<String, String> getMepinParameters() {
+        AuthenticatorConfig authConfig = FileBasedConfigurationBuilder.getInstance()
+                .getAuthenticatorBean(MepinConstants.AUTHENTICATOR_NAME);
+        return authConfig.getParameterMap();
+    }
 
     /**
      * Check whether the authentication or logout request can be handled by the authenticator
@@ -114,7 +126,6 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                                                  AuthenticationContext context) throws AuthenticationFailedException {
         String username = null;
         try {
-            AuthenticatedUser authenticatedUser;
             Map<String, String> authenticatorProperties = context.getAuthenticatorProperties();
             String tenantDomain = context.getTenantDomain();
             context.setProperty(MepinConstants.AUTHENTICATION, MepinConstants.AUTHENTICATOR_NAME);
@@ -123,16 +134,16 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             }
             FederatedAuthenticatorUtil.setUsernameFromFirstStep(context);
             username = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
-            authenticatedUser = (AuthenticatedUser) context.getProperty(MepinConstants.AUTHENTICATED_USER);
+            AuthenticatedUser authenticatedUser = (AuthenticatedUser) context
+                    .getProperty(MepinConstants.AUTHENTICATED_USER);
             // find the authenticated user.
             if (authenticatedUser == null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Authentication failed: Could not find the authenticated user. " +
-                            "The user name might be null");
+                    log.debug("Authentication failed: Could not find the authenticated user."
+                            + " The user name " + username + " might be null");
                 }
-                throw new AuthenticationFailedException
-                        ("Authentication failed: Could not find the authenticated user. " +
-                                "The user name " + username + " might be null");
+                throw new AuthenticationFailedException("Authentication failed: Could not find the authenticated user."
+                        + " The user name " + username + " might be null");
             }
             String queryParams = FrameworkUtils.getQueryStringWithFrameworkContextId(context.getQueryParams(),
                     context.getCallerSessionKey(), context.getContextIdentifier());
@@ -160,19 +171,22 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                                   AuthenticatedUser authenticatedUser, HttpServletResponse response,
                                   String queryParams)
             throws MepinException, IOException, AuthenticationFailedException {
-        boolean isMepinDisabledByUser = MepinUtils.isMepinDisableForLocalUser(username, context);
+        boolean isMepinDisabledUser = isMepinDisableForUser(username, context);
         if (log.isDebugEnabled()) {
-            log.debug("Mepin authentication is enabled by user: " + isMepinDisabledByUser);
+            log.debug("Mepin authentication is enabled by user: " + isMepinDisabledUser);
         }
-        boolean isMepinEnabledByAdmin = MepinUtils.isMepinMandatory(context);
+        boolean isMepinEnabledByAdmin = isMepinMandatory(context);
         if (log.isDebugEnabled()) {
             log.debug("Mepin authentication is enabled by admin: " + isMepinEnabledByAdmin);
         }
-        if (isMepinDisabledByUser && isMepinEnabledByAdmin) {
+        if (isMepinDisabledUser && isMepinEnabledByAdmin) {
+            //Redirecting to ErrorPage.
             redirectToErrorPage(response, context, queryParams, MepinConstants.ERROR_MEPIN_DISABLE);
-        } else if (isMepinDisabledByUser) {
+        } else if (isMepinDisabledUser) {
+            //The authentication flow happens with first step authentication.
             processFirstStepOnly(authenticatedUser, context);
         } else {
+            //Proceed with Mepin two factor authentication.
             proceedWithMepin(response, authenticatorProperties, context, username);
         }
     }
@@ -193,7 +207,6 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
         }
         return url;
     }
-
 
     /**
      * Redirect to an error page.
@@ -245,13 +258,19 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      * @param context the AuthenticationContext
      * @return the errorPage
      */
-    private String getErrorPage(AuthenticationContext context) {
-        String errorPage = MepinUtils.getErrorPageFromXMLFile(context);
+    private String getErrorPage(AuthenticationContext context) throws AuthenticationFailedException {
+        String errorPage = getErrorPageFromXMLFile(context);
+        String authenticationEndpointURL;
         if (StringUtils.isEmpty(errorPage)) {
-            errorPage = ConfigurationFacade.getInstance().getAuthenticationEndpointURL()
-                    .replace(MepinConstants.LOGIN_PAGE, MepinConstants.ERROR_PAGE);
+            authenticationEndpointURL = ConfigurationFacade.getInstance().getAuthenticationEndpointURL();
+            errorPage= authenticationEndpointURL.replace(MepinConstants.LOGIN_PAGE, MepinConstants.ERROR_PAGE);
             if (log.isDebugEnabled()) {
-                log.debug("Default authentication endpoint context is used");
+                log.debug("The default authentication endpoint URL " + authenticationEndpointURL +
+                        "is replaced by default the mepin error page context " + errorPage);
+            }
+            if (!errorPage.contains(MepinConstants.ERROR_PAGE)) {
+                throw new AuthenticationFailedException("The default authentication page is not replaced by default" +
+                        " error page");
             }
         }
         return errorPage;
@@ -264,12 +283,12 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      * @param context  the AuthenticationContext
      * @throws AuthenticationFailedException
      */
-    protected void proceedWithMepin(HttpServletResponse response, Map<String, String> authenticatorProperties,
+    private void proceedWithMepin(HttpServletResponse response, Map<String, String> authenticatorProperties,
                                     AuthenticationContext context, String userName) throws AuthenticationFailedException {
         boolean isSecondStep = false;
         boolean isLinked = false;
         String mepinID;
-        String loginPage = getMepinPage(context);
+        String mepinPage = getMepinPage(context);
         try {
             if (StringUtils.isNotEmpty(userName)) {
                 isSecondStep = true;
@@ -287,7 +306,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             if (context.isRetrying()) {
                 retryParam = "&authFailure=true&authFailureMsg=authentication.fail.message";
             }
-            response.sendRedirect(loginPage + "?authenticators=" + getName()
+            response.sendRedirect(mepinPage + "?authenticators=" + getName()
                     + "&applicationId=" + authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID)
                     + "&callbackUrl=" + authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL)
                     + "&" + FrameworkConstants.SESSION_DATA_KEY + "=" + context.getContextIdentifier()
@@ -305,7 +324,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      * @throws AuthenticationFailedException
      */
     private String getMepinPage(AuthenticationContext context) throws AuthenticationFailedException {
-        String mepinPage = MepinUtils.getMepinPageFromXMLFile(context);
+        String mepinPage = getMepinPageFromXMLFile(context);
         if (log.isDebugEnabled()) {
             log.debug("The mepin page url is " + mepinPage);
         }
@@ -316,9 +335,41 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                 log.debug("The default authentication endpoint URL " + authenticationEndpointURL +
                         "is replaced by default mepin mepin page context " + mepinPage);
             }
+            if (!mepinPage.contains(MepinConstants.MEPIN_PAGE)) {
+                throw new AuthenticationFailedException("The default authentication page is not replaced by default" +
+                        " mepin page");
+            }
         }
 
         return mepinPage;
+    }
+
+    /**
+     * Get the friendly name of the Authenticator
+     */
+    @Override
+    public String getFriendlyName() {
+        return MepinConstants.AUTHENTICATOR_FRIENDLY_NAME;
+    }
+
+    /**
+     * Get the name of the Authenticator
+     */
+    @Override
+    public String getName() {
+        return MepinConstants.AUTHENTICATOR_NAME;
+    }
+
+    /**
+     * Get the Context identifier sent with the request.
+     */
+    public String getContextIdentifier(HttpServletRequest request) {
+        return request.getParameter(FrameworkConstants.SESSION_DATA_KEY);
+    }
+
+    @Override
+    protected boolean retryAuthenticationEnabled() {
+        return true;
     }
 
     /**
@@ -627,35 +678,6 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
         }
     }
 
-
-    /**
-     * Get the friendly name of the Authenticator
-     */
-    @Override
-    public String getFriendlyName() {
-        return MepinConstants.AUTHENTICATOR_FRIENDLY_NAME;
-    }
-
-    /**
-     * Get the name of the Authenticator
-     */
-    @Override
-    public String getName() {
-        return MepinConstants.AUTHENTICATOR_NAME;
-    }
-
-    /**
-     * Get the Context identifier sent with the request.
-     */
-    public String getContextIdentifier(HttpServletRequest request) {
-        return request.getParameter(FrameworkConstants.SESSION_DATA_KEY);
-    }
-
-    @Override
-    protected boolean retryAuthenticationEnabled() {
-        return true;
-    }
-
     /**
      * Add Mepin id to mepinid claim for the association the mepin id with user name.
      *
@@ -684,14 +706,11 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      */
     private String getMepinIdFromUserClaim(AuthenticationContext context, String userName)
             throws org.wso2.carbon.user.core.UserStoreException, AuthenticationFailedException {
-        String username;
-        String tenantAwareUsername;
+        String username, tenantAwareUsername, mepinId;
         UserStoreManager userStoreManager;
-        String mepinId;
-        AuthenticatedUser authenticatedUser;
 
         // find the authenticated user.
-        authenticatedUser = (AuthenticatedUser) context.getProperty(MepinConstants.AUTHENTICATED_USER);
+        AuthenticatedUser authenticatedUser = (AuthenticatedUser) context.getProperty(MepinConstants.AUTHENTICATED_USER);
         if (authenticatedUser == null) {
             throw new AuthenticationFailedException
                     ("Authentication failed!. Cannot proceed further without identifying the user");
@@ -708,7 +727,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
         }
 
         if (log.isDebugEnabled()) {
-            log.debug("The claim uri " + MepinConstants.MEPIN_ID_CLAIM + "of " + userName + " updated with the mepin id "
+            log.debug("The claim uri " + MepinConstants.MEPIN_ID_CLAIM + " of " + userName + " updated with mepin id "
                     + mepinId);
         }
         return mepinId;
@@ -736,5 +755,132 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                     "for tenant domain " + tenantDomain, e);
         }
         return userStoreManager;
+    }
+
+    /**
+     * Check whether Mepin is disable by user.
+     *
+     * @param username the Username
+     * @param context  the AuthenticationContext
+     * @return true or false
+     * @throws MepinException
+     */
+    private boolean isMepinDisableForUser(String username, AuthenticationContext context)
+            throws MepinException {
+        UserRealm userRealm;
+        try {
+            String tenantDomain = MultitenantUtils.getTenantDomain(username);
+            int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
+            RealmService realmService = IdentityTenantUtil.getRealmService();
+            userRealm = realmService.getTenantUserRealm(tenantId);
+            username = MultitenantUtils.getTenantAwareUsername(String.valueOf(username));
+            boolean isEnableORDisableLocalUserClaim = isMepinDisableByUser(context);
+            if (userRealm != null) {
+                if (isEnableORDisableLocalUserClaim) {
+                    String isMepinEnabledByUser = userRealm.getUserStoreManager().getUserClaimValue(username,
+                            MepinConstants.USER_MEPIN_DISABLED_CLAIM_URI, null);
+                    return Boolean.parseBoolean(isMepinEnabledByUser);
+                }
+            } else {
+                throw new MepinException("Cannot find the user realm for the given tenant domain : " + tenantDomain);
+            }
+        } catch (UserStoreException e) {
+            throw new MepinException("Failed while trying to access userRealm of the user : " + username, e);
+        }
+        return false;
+    }
+
+    /**
+     * Check whether Mepin is mandatory or not.
+     *
+     * @param context the authentication context
+     * @return status of user's mepin authentication
+     */
+    private boolean isMepinMandatory(AuthenticationContext context) {
+        boolean isMepinMandatory = false;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.IS_MEPIN_MANDATORY)) {
+            isMepinMandatory = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_MANDATORY));
+        } else if ((context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)) != null) {
+            isMepinMandatory = Boolean.parseBoolean(String.valueOf
+                    (context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is mandatory : " + isMepinMandatory);
+        }
+        return isMepinMandatory;
+    }
+
+    /**
+     * Check whether user enable the second factor or not.
+     *
+     * @param context the authentication context
+     * @return status of user's mepin authentication
+     */
+    private boolean isMepinDisableByUser(AuthenticationContext context) {
+        boolean isMepinDisableByUser = false;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) {
+            isMepinDisableByUser = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_ENABLE_BY_USER));
+        } else if ((context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) != null) {
+            isMepinDisableByUser = Boolean.parseBoolean(String.valueOf
+                    (context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is disabled by user : " + isMepinDisableByUser);
+        }
+        return isMepinDisableByUser;
+    }
+
+    /**
+     * Get the error page url from the application-authentication.xml file.
+     *
+     * @param context the authentication context
+     * @return the error page
+     */
+    private String getErrorPageFromXMLFile(AuthenticationContext context) {
+        String errorPage = null;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) {
+            errorPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL);
+        } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) != null) {
+            errorPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The error page is " + errorPage);
+        }
+        return errorPage;
+    }
+
+    /**
+     * Get the mepin page url from the application-authentication.xml file.
+     *
+     * @param context the AuthenticationContext
+     * @return mepin page
+     */
+    private String getMepinPageFromXMLFile(AuthenticationContext context) {
+        String mepinPage = null;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) {
+            mepinPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL);
+        } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) != null) {
+            mepinPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin page is " + mepinPage);
+        }
+        return mepinPage;
     }
 }

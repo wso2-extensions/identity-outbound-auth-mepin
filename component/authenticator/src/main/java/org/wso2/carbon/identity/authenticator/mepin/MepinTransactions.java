@@ -25,10 +25,14 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.authentication.framework.exception.AuthenticationFailedException;
 
 import javax.net.ssl.HttpsURLConnection;
-import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
+import java.io.OutputStream;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 
 /**
  * Mepin transactions.
@@ -102,7 +106,8 @@ public class MepinTransactions {
                 connection.setDoOutput(true);
                 connection.setRequestProperty(MepinConstants.HTTP_ACCEPT_CHARSET, MepinConstants.CHARSET);
                 connection.setRequestProperty(MepinConstants.HTTP_CONTENT_TYPE, MepinConstants.HTTP_POST_CONTENT_TYPE);
-                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC + encoding);
+                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC
+                        + encoding);
                 OutputStream output = connection.getOutputStream();
                 output.write(query.getBytes(MepinConstants.CHARSET));
                 int status = connection.getResponseCode();
