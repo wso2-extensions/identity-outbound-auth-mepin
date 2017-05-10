@@ -2,7 +2,6 @@ body {
     background: #f9f9f9;
     font-family: 'Roboto Light', Arial, Helvetica, sans-serif;
     font-weight: 300;
-    position: relative;
 }
 header {
     background: #222222;
@@ -120,20 +119,4 @@ button.font-extra-large {
 }
 img.idp-image {
     padding: 3px 2px;
-}
-iframe.mepin-loginbutton {
-    height: 22px !important;
-    overflow: hidden;
-}
-iframe.mepin-logindialog {
-    left: 0 !important;
-}
-
-body.sticky-footer {
-    padding-bottom: 41.5%;
-}
-body.sticky-footer footer {
-    position: absolute;
-    bottom: 0;
-    z-index: 1000;
 }

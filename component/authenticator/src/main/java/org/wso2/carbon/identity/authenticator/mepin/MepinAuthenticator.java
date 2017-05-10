@@ -672,7 +672,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      */
     private String getMepinIdFromUserClaim(AuthenticationContext context, String userName)
             throws org.wso2.carbon.user.core.UserStoreException, AuthenticationFailedException {
-        String username, tenantAwareUsername, mepinId;
+        String tenantAwareUsername, mepinId;
         UserStoreManager userStoreManager;
 
         // find the authenticated user.
@@ -682,8 +682,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                     ("Authentication failed!. Cannot proceed further without identifying the user");
         }
         try {
-            username = authenticatedUser.getAuthenticatedSubjectIdentifier();
-            tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(username);
+            tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
             userStoreManager = getUserStoreManager(context.getTenantDomain());
             mepinId = userStoreManager.getUserClaimValue(tenantAwareUsername,
                     MepinConstants.MEPIN_ID_CLAIM, null);
