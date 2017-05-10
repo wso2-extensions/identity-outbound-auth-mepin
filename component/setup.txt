@@ -1,0 +1,35 @@
+Product: WSO2 IS authenticator for MePIN
+Pre-requisites:
+
+- Maven 3.x
+- Java 1.6 or above
+
+Tested Platform: 
+
+- UBUNTU 14.04
+- WSO2 IS 5.1.0, IS 5.2.0
+- Java 1.7
+
+Do the following:
+
+1. Navigate to authentication-endpoint/org.wso2.carbon.identity.application.authentication.endpoint.mepin and build.
+
+2. Place the mepinauthenticationendpoint.war file into <IS_HOME>/repository/deployment/server/webapps.
+
+3. Navigate to mepin-authenticator/org.wso2.carbon.identity.authenticator.mepin and build.
+
+4. Place the org.wso2.carbon.identity.authenticator.mepin-1.0.3.jar file into <IS_HOME>/repository/components/dropins.
+
+5. Add the following configuration  <IS_HOME>/repository/conf/identity/application-authentication.xml file under the
+ <AuthenticatorConfigs> section
+
+<AuthenticatorConfig name="MePINAuthenticator" enabled="true">
+      <Parameter name="MepinAuthenticationEndpointURL">https://localhost:9443/mepinauthenticationendpoint/mepin.jsp</Parameter>
+      <Parameter name="MepinAuthenticationEndpointErrorPage">https://localhost:9443/mepinauthenticationendpoint/mepinError.jsp</Parameter>
+      <Parameter name="MepinEnableByUserClaim">true</Parameter>
+      <Parameter name="MepinMandatory">true</Parameter>
+      <Parameter name="usecase">association</Parameter>
+      <Parameter name="secondaryUserstore">primary</Parameter>
+</AuthenticatorConfig>
+
+6.  Follow the steps in https://docs.wso2.com/display/ISCONNECTORS/Configuring+MePIN+Authenticator

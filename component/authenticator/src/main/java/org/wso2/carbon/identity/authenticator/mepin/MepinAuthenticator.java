@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ *  Copyright (c) 2017, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  *  WSO2 Inc. licenses this file to you under the Apache License,
  *  Version 2.0 (the "License"); you may not use this file except
@@ -22,53 +22,59 @@ package org.wso2.carbon.identity.authenticator.mepin;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.context.CarbonContext;
+import org.wso2.carbon.extension.identity.helper.FederatedAuthenticatorUtil;
+import org.wso2.carbon.extension.identity.helper.IdentityHelperConstants;
+import org.wso2.carbon.extension.identity.helper.util.IdentityHelperUtil;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorFlowStatus;
 import org.wso2.carbon.identity.application.authentication.framework.FederatedApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.LocalApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.config.ConfigurationFacade;
+import org.wso2.carbon.identity.application.authentication.framework.config.builder.FileBasedConfigurationBuilder;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.AuthenticatorConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.StepConfig;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
-import org.wso2.carbon.identity.application.authentication.framework.exception.ApplicationAuthenticatorException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.AuthenticationFailedException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.LogoutFailedException;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.model.Property;
-import org.wso2.carbon.identity.authenticator.mepin.internal.MepinAuthenticatorServiceComponent;
-import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
+import org.wso2.carbon.identity.authenticator.mepin.exception.MepinException;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
-import org.wso2.carbon.identity.user.profile.mgt.UserProfileException;
+import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
-import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Authenticator of MePIN
+ * Authenticator for MePIN
  */
-public class MepinAuthenticator extends AbstractApplicationAuthenticator
-        implements FederatedApplicationAuthenticator {
+public class MepinAuthenticator extends AbstractApplicationAuthenticator implements FederatedApplicationAuthenticator {
 
     private static final long serialVersionUID = -8948601002969608129L;
-    private static Log log = LogFactory.getLog(MepinAuthenticator.class);
-    private Map<String, String> authenticatorProperties;
+    private static final Log log = LogFactory.getLog(MepinAuthenticator.class);
+
+    /**
+     * Get parameter values from application-authentication.xml local file.
+     */
+    public static Map<String, String> getMepinParameters() {
+        AuthenticatorConfig authConfig = FileBasedConfigurationBuilder.getInstance()
+                .getAuthenticatorBean(MepinConstants.AUTHENTICATOR_NAME);
+        return authConfig.getParameterMap();
+    }
 
     /**
      * Check whether the authentication or logout request can be handled by the authenticator
@@ -76,37 +82,223 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
     @Override
     public boolean canHandle(HttpServletRequest request) {
         if (log.isDebugEnabled()) {
-            log.debug("Inside MepinAuthenticator.canHandle()");
+            log.debug("Inside MepinAuthenticator canHandle");
         }
         return ((!StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN)))
                 || (!StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_LOGIN))));
     }
 
+    @Override
+    public AuthenticatorFlowStatus process(HttpServletRequest request,
+                                           HttpServletResponse response,
+                                           AuthenticationContext context)
+            throws AuthenticationFailedException, LogoutFailedException {
+        // if the logout request comes, then no need to go through and complete the flow.
+        if (context.isLogoutRequest()) {
+            return AuthenticatorFlowStatus.SUCCESS_COMPLETED;
+        } else if (StringUtils.isNotEmpty(request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN))) {
+            // if the request comes with MOBILE_NUMBER, it will go through this flow.
+            processAuthenticationResponse(request, response, context);
+            return AuthenticatorFlowStatus.SUCCESS_COMPLETED;
+        } else if (StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_LOGIN))) {
+            // if the request comes with code, it will go through this flow.
+            initiateAuthenticationRequest(request, response, context);
+            if (context.getProperty(MepinConstants.AUTHENTICATION)
+                    .equals(MepinConstants.AUTHENTICATOR_NAME)) {
+                // if the request comes with authentication is Mepin, it will go through this flow.
+                return AuthenticatorFlowStatus.INCOMPLETE;
+            } else {
+                // if the request comes with authentication is basic, complete the flow.
+                return AuthenticatorFlowStatus.SUCCESS_COMPLETED;
+            }
+        } else {
+            return super.process(request, response, context);
+        }
+    }
+
     /**
-     * initiate the authentication request
+     * Initiate the authentication request.
      */
     @Override
-    protected void initiateAuthenticationRequest(HttpServletRequest request,
-                                                 HttpServletResponse response,
-                                                 AuthenticationContext context)
+    protected void initiateAuthenticationRequest(HttpServletRequest request, HttpServletResponse response,
+                                                 AuthenticationContext context) throws AuthenticationFailedException {
+        String username = null;
+        try {
+            Map<String, String> authenticatorProperties = context.getAuthenticatorProperties();
+            String tenantDomain = context.getTenantDomain();
+            context.setProperty(MepinConstants.AUTHENTICATION, MepinConstants.AUTHENTICATOR_NAME);
+            if (!tenantDomain.equals(MepinConstants.SUPER_TENANT)) {
+                IdentityHelperUtil.loadApplicationAuthenticationXMLFromRegistry(context, getName(), tenantDomain);
+            }
+            FederatedAuthenticatorUtil.setUsernameFromFirstStep(context);
+            username = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
+            AuthenticatedUser authenticatedUser = (AuthenticatedUser) context
+                    .getProperty(MepinConstants.AUTHENTICATED_USER);
+            // find the authenticated user.
+            if (authenticatedUser == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Authentication failed: Could not find the authenticated user."
+                            + " The user name " + username + " might be null");
+                }
+                throw new AuthenticationFailedException("Authentication failed: Could not find the authenticated user."
+                        + " The user name " + username + " might be null");
+            }
+            String queryParams = FrameworkUtils.getQueryStringWithFrameworkContextId(context.getQueryParams(),
+                    context.getCallerSessionKey(), context.getContextIdentifier());
+            processMepinFlow(context, username, authenticatorProperties, authenticatedUser, response, queryParams);
+        } catch (MepinException | IOException e) {
+            throw new AuthenticationFailedException("Error while processing the authentication flow for the user "
+                    + username, e);
+        }
+    }
+
+    /**
+     * Check the mepin mandatory options and process the mepin flow according to the options.
+     *
+     * @param context                 the authentication context
+     * @param username                the user name
+     * @param authenticatorProperties the authentication properties
+     * @param authenticatedUser       the authenticated user
+     * @param response                the HttpServletResponse
+     * @throws MepinException
+     * @throws IOException
+     * @throws AuthenticationFailedException
+     */
+    private void processMepinFlow(AuthenticationContext context, String username,
+                                  Map<String, String> authenticatorProperties,
+                                  AuthenticatedUser authenticatedUser, HttpServletResponse response,
+                                  String queryParams)
+            throws MepinException, IOException, AuthenticationFailedException {
+        boolean isMepinDisabledUser = isMepinDisableForUser(username, context);
+        if (log.isDebugEnabled()) {
+            log.debug("Mepin authentication is enabled by user: " + isMepinDisabledUser);
+        }
+        boolean isMepinEnabledByAdmin = isMepinMandatory(context);
+        if (log.isDebugEnabled()) {
+            log.debug("Mepin authentication is enabled by admin: " + isMepinEnabledByAdmin);
+        }
+        if (isMepinDisabledUser && isMepinEnabledByAdmin) {
+        /*If the parameter MepinMandatory is true, the parameter MepinEnableByUserClaim is true
+        and the user disables the Mepin authenticator using the claim, the authentication is failed .*/
+            redirectToErrorPage(response, context, queryParams, MepinConstants.ERROR_MEPIN_DISABLE);
+        } else if (isMepinDisabledUser) {
+        /*If the parameter MepinMandatory is false and the parameter MepinEnableByUserClaim is true
+        and the user disables the Mepin authenticator using the claim, the authentication flow happens
+        with first step authentication.*/
+            processFirstStepOnly(authenticatedUser, context);
+        } else {
+        /* In other cases, the authentication flow happens with Mepin two factor authentication.*/
+            proceedWithMepin(response, authenticatorProperties, context, username);
+        }
+    }
+
+    /**
+     * Ge the redirection URL.
+     *
+     * @param baseURI     the base path
+     * @param queryParams the queryParams
+     * @return the url
+     */
+    private String getURL(String baseURI, String queryParams) {
+        String url;
+        if (StringUtils.isNotEmpty(queryParams)) {
+            url = baseURI + "?" + queryParams + "&" + MepinConstants.NAME_OF_AUTHENTICATORS + getName();
+        } else {
+            url = baseURI + "?" + MepinConstants.NAME_OF_AUTHENTICATORS + getName();
+        }
+        return url;
+    }
+
+    /**
+     * Redirect to an error page.
+     *
+     * @param response    the HttpServletResponse
+     * @param queryParams the query parameter
+     * @param retryParam  the retry parameter
+     * @throws AuthenticationFailedException
+     */
+    private void redirectToErrorPage(HttpServletResponse response, AuthenticationContext context, String queryParams,
+                                     String retryParam)
             throws AuthenticationFailedException {
-        authenticatorProperties = context.getAuthenticatorProperties();
-        String loginPage = ConfigurationFacade.getInstance().getAuthenticationEndpointURL().replace(
-                MepinConstants.LOGIN_PAGE, MepinConstants.MEPIN_PAGE);
+        // that Enable the Mepin in user's Profile. Cannot proceed further without Mepin authentication.
+        String errorPage = getErrorPage(context);
+        String url = getURL(errorPage, queryParams);
+        if (log.isDebugEnabled()) {
+            log.debug("Th error page is " + errorPage + " and the url is " + url);
+        }
+        try {
+            response.sendRedirect(url + retryParam);
+        } catch (IOException e) {
+            throw new AuthenticationFailedException("Exception occurred while redirecting to error page " + errorPage +
+                    " and the url " + url, e);
+        }
+    }
+
+    /**
+     * In Mepin optional case proceed with first step only.It can be basic or federated.
+     *
+     * @param authenticatedUser the name of authenticatedUser
+     * @param context           the AuthenticationContext
+     */
+    private void processFirstStepOnly(AuthenticatedUser authenticatedUser, AuthenticationContext context) {
+        //the authentication flow happens with basic authentication.
+        StepConfig stepConfig = context.getSequenceConfig().getStepMap().get(context.getCurrentStep() - 1);
+        if (stepConfig.getAuthenticatedAutenticator().getApplicationAuthenticator() instanceof
+                LocalApplicationAuthenticator) {
+            FederatedAuthenticatorUtil.updateLocalAuthenticatedUserInStepConfig(context, authenticatedUser);
+            context.setProperty(MepinConstants.AUTHENTICATION, MepinConstants.BASIC);
+        } else {
+            FederatedAuthenticatorUtil.updateAuthenticatedUserInStepConfig(context, authenticatedUser);
+            context.setProperty(MepinConstants.AUTHENTICATION, MepinConstants.FEDERETOR);
+        }
+    }
+
+    /**
+     * Get the errorPage from authentication.xml file or use the error page from constant file.
+     *
+     * @param context the AuthenticationContext
+     * @return the errorPage
+     */
+    private String getErrorPage(AuthenticationContext context) throws AuthenticationFailedException {
+        String errorPage = getErrorPageFromXMLFile(context);
+        String authenticationEndpointURL;
+        if (StringUtils.isEmpty(errorPage)) {
+            authenticationEndpointURL = ConfigurationFacade.getInstance().getAuthenticationEndpointURL();
+            errorPage = authenticationEndpointURL.replace(MepinConstants.LOGIN_PAGE, MepinConstants.ERROR_PAGE);
+            if (log.isDebugEnabled()) {
+                log.debug("The default authentication endpoint URL " + authenticationEndpointURL +
+                        "is replaced by default the mepin error page context " + errorPage);
+            }
+            if (!errorPage.contains(MepinConstants.ERROR_PAGE)) {
+                throw new AuthenticationFailedException("The default authentication page is not replaced by default" +
+                        " error page");
+            }
+        }
+        return errorPage;
+    }
+
+    /**
+     * Proceed the Mepin request flow.
+     *
+     * @param response the HttpServletResponse
+     * @param context  the AuthenticationContext
+     * @throws AuthenticationFailedException
+     */
+    private void proceedWithMepin(HttpServletResponse response, Map<String, String> authenticatorProperties,
+                                  AuthenticationContext context, String userName) throws AuthenticationFailedException {
         boolean isSecondStep = false;
         boolean isLinked = false;
         String mepinID;
+        String mepinPage = getMepinPage(context);
         try {
-            String idpName = context.getExternalIdP().getIdPName();
-            String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
-            if (StringUtils.isNotEmpty(authenticatedLocalUsername)) {
+            if (StringUtils.isNotEmpty(userName)) {
                 isSecondStep = true;
-                mepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername, context);
+                mepinID = getMepinIdFromUserClaim(context, userName);
                 if (StringUtils.isNotEmpty(mepinID)) {
                     isLinked = true;
                 }
             }
-        } catch (UserProfileException e) {
+        } catch (org.wso2.carbon.user.core.UserStoreException e) {
             throw new AuthenticationFailedException("Unable to retrieve the associated user.", e);
         }
 
@@ -115,17 +307,70 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
             if (context.isRetrying()) {
                 retryParam = "&authFailure=true&authFailureMsg=authentication.fail.message";
             }
-            response.sendRedirect(loginPage + "?authenticators=" + getName()
+            response.sendRedirect(mepinPage + "?authenticators=" + getName()
                     + "&applicationId=" + authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID)
                     + "&callbackUrl=" + authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL)
                     + "&" + FrameworkConstants.SESSION_DATA_KEY + "=" + context.getContextIdentifier()
                     + "&isSecondStep=" + isSecondStep + "&isLinked=" + isLinked + retryParam);
         } catch (IOException e) {
-            if (log.isDebugEnabled()) {
-                log.debug("Error while redirecting");
-            }
             throw new AuthenticationFailedException("Error while redirecting the MePIN", e);
         }
+    }
+
+    /**
+     * Get the mepin page from authentication.xml file or use the mepin page from constant file.
+     *
+     * @param context the AuthenticationContext
+     * @return the loginPage
+     * @throws AuthenticationFailedException
+     */
+    private String getMepinPage(AuthenticationContext context) throws AuthenticationFailedException {
+        String mepinPage = getMepinPageFromXMLFile(context);
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin page url is " + mepinPage);
+        }
+        if (StringUtils.isEmpty(mepinPage)) {
+            String authenticationEndpointURL = ConfigurationFacade.getInstance().getAuthenticationEndpointURL();
+            mepinPage = authenticationEndpointURL.replace(MepinConstants.LOGIN_PAGE, MepinConstants.MEPIN_PAGE);
+            if (log.isDebugEnabled()) {
+                log.debug("The default authentication endpoint URL " + authenticationEndpointURL +
+                        "is replaced by default mepin mepin page context " + mepinPage);
+            }
+            if (!mepinPage.contains(MepinConstants.MEPIN_PAGE)) {
+                throw new AuthenticationFailedException("The default authentication page is not replaced by default" +
+                        " mepin page");
+            }
+        }
+
+        return mepinPage;
+    }
+
+    /**
+     * Get the friendly name of the Authenticator
+     */
+    @Override
+    public String getFriendlyName() {
+        return MepinConstants.AUTHENTICATOR_FRIENDLY_NAME;
+    }
+
+    /**
+     * Get the name of the Authenticator
+     */
+    @Override
+    public String getName() {
+        return MepinConstants.AUTHENTICATOR_NAME;
+    }
+
+    /**
+     * Get the Context identifier sent with the request.
+     */
+    public String getContextIdentifier(HttpServletRequest request) {
+        return request.getParameter(FrameworkConstants.SESSION_DATA_KEY);
+    }
+
+    @Override
+    protected boolean retryAuthenticationEnabled() {
+        return true;
     }
 
     /**
@@ -220,168 +465,145 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
     }
 
     /**
-     * Process the response of the MePIN end-point
+     * Process the Mepin association flow.
+     *
+     * @param authenticatorProperties the authentication properties
+     * @param request                 the Http Servlet Request
+     * @param context                 the authentication context
+     * @param username                the user name
+     * @throws AuthenticationFailedException
      */
-    @Override
-    protected void processAuthenticationResponse(HttpServletRequest request,
-                                                 HttpServletResponse response,
-                                                 AuthenticationContext context)
+    protected void processAssociationFlow(HttpServletRequest request, Map<String, String> authenticatorProperties,
+                                          AuthenticationContext context, String username)
             throws AuthenticationFailedException {
-        String username;
-        String password;
-        if ((!StringUtils.isEmpty(request.getParameter(MepinConstants.IS_SECOND_STEP))
-                && !StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN)))) {
-            if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
-                username = getLocalAuthenticatedUser(context).getUserName();
-            } else {
-                String authHeader = request.getParameter(MepinConstants.AUTH_HEADER);
-                UserStoreManager userStoreManager;
-                authHeader = new String(Base64.decodeBase64(authHeader.getBytes()));
-                int index = authHeader.indexOf(":");
-                username = authHeader.substring(0, index);
-                password = authHeader.substring(index + 1, authHeader.length());
-                int tenantId = IdentityTenantUtil.getTenantIdOfUser(username);
-                try {
-                    userStoreManager = (UserStoreManager) MepinAuthenticatorServiceComponent.
-                            getRealmService().getTenantUserRealm(tenantId).getUserStoreManager();
-                    boolean isAuthenticated;
-                    isAuthenticated = userStoreManager.authenticate(
-                            MultitenantUtils.getTenantAwareUsername(username), password);
-                    if (!isAuthenticated) {
-                        throw new AuthenticationFailedException("Authentication Failed: Invalid username or password");
-                    }
-                } catch (UserStoreException e) {
-                    throw new AuthenticationFailedException("Unable to get the user store manager: " + e.getMessage(), e);
-                }
-            }
-
-            try {
-                String accessToken = request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN);
-                String responseString = new MepinTransactions().getUserInformation(
-                        authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
-                        authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
-                        accessToken);
-                if (!responseString.equals(MepinConstants.FAILED)) {
-                    JsonObject responseJson = new JsonParser().parse(responseString).getAsJsonObject();
-                    String mepinId = responseJson.getAsJsonPrimitive(MepinConstants.MEPIN_ID).getAsString();
-                    String idpName = context.getExternalIdP().getIdPName();
-                    String authenticatedLocalUsername = getLocalAuthenticatedUser(context).getUserName();
-                    String associatedMepinID = getMepinIdAssociatedWithUsername(idpName, authenticatedLocalUsername, context);
-                    if (StringUtils.isEmpty(associatedMepinID)) {
-                        associateFederatedIdToLocalUsername(username, context,
-                                getFederateAuthenticatedUser(context, mepinId));
-                        context.setSubject(AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(username));
-                    } else {
-                        log.error("Trying to hack the mepinId " + mepinId + " of the " +
-                                username + " User with the mepinId " + associatedMepinID);
-                        return;
-                    }
+        try {
+            String accessToken = request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN);
+            String responseString = new MepinTransactions().getUserInformation(
+                    authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
+                    authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
+                    accessToken);
+            if (!responseString.equals(MepinConstants.FAILED)) {
+                JsonObject responseJson = new JsonParser().parse(responseString).getAsJsonObject();
+                String mepinId = responseJson.getAsJsonPrimitive(MepinConstants.MEPIN_ID).getAsString();
+                String authenticatedLocalUsername = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
+                String associatedMepinID = getMepinIdFromUserClaim(context, authenticatedLocalUsername);
+                if (StringUtils.isEmpty(associatedMepinID)) {
+                    addMepinIdToUserClaim(username, mepinId, context);
+                    context.setSubject(AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(username));
                 } else {
-                    throw new AuthenticationFailedException("Unable to get the MePIN ID.");
-                }
-            } catch (ApplicationAuthenticatorException e) {
-                throw new AuthenticationFailedException("Unable to set the subject: " + e.getMessage(), e);
-            } catch (UserProfileException e) {
-                throw new AuthenticationFailedException("Unable to associate the user: " + e.getMessage(), e);
-            }
-        } else {
-            if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
-                username = getLocalAuthenticatedUser(context).getUserName();
-            } else {
-                username = request.getParameter(MepinConstants.USERNAME);
-                password = request.getParameter(MepinConstants.PASSWORD);
-                boolean isBasicAuthenticated;
-                UserStoreManager userStoreManager;
-                int tenantId = IdentityTenantUtil.getTenantIdOfUser(username);
-                try {
-                    userStoreManager = (UserStoreManager) MepinAuthenticatorServiceComponent.
-                            getRealmService().getTenantUserRealm(tenantId).getUserStoreManager();
-                    isBasicAuthenticated = userStoreManager.authenticate(
-                            MultitenantUtils.getTenantAwareUsername(username), password);
-                    if (!isBasicAuthenticated) {
-                        throw new AuthenticationFailedException("Authentication Failed: Invalid username or password");
-                    }
-                } catch (UserStoreException e) {
-                    throw new AuthenticationFailedException("Unable to get the user store manager: " + e.getMessage(), e);
-                }
-            }
-            String allowStatus;
-
-            try {
-                String idpName = context.getExternalIdP().getIdPName();
-                String mePinId;
-                mePinId = getMepinIdAssociatedWithUsername(idpName, username, context);
-                if (StringUtils.isEmpty(mePinId)) {
-                    log.error("First, You need to Link with Mepin");
+                    log.error("Trying to hack the mepinId " + mepinId + " of the " + username
+                            + " User with the mepinId " + associatedMepinID);
                     return;
                 }
-                boolean isAuthenticated = false;
-                String transactionResponseString = new MepinTransactions().createTransaction(
-                        mePinId, context.getContextIdentifier(),
-                        MepinConstants.MEPIN_CREATE_TRANSACTION_URL,
-                        authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
-                        authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
+            } else {
+                throw new AuthenticationFailedException("Unable to get the MePIN ID.");
+            }
+        } catch (org.wso2.carbon.user.core.UserStoreException e) {
+            throw new AuthenticationFailedException("Unable to associate the user", e);
+        }
+    }
+
+    /**
+     * Get the authentication status whether authenticated or not in Mepin retrying flow.
+     *
+     * @param authenticatorProperties the authentication properties
+     * @param transactionId           the transaction id
+     * @return the
+     * @throws AuthenticationFailedException
+     */
+    protected boolean processMepinRetry(Map<String, String> authenticatorProperties, String transactionId)
+            throws AuthenticationFailedException {
+        Boolean isAuthenticated = false;
+        try {
+            String allowStatus;
+            int retry = 0;
+            int retryInterval = 1;
+            int retryCount = Integer.parseInt(authenticatorProperties.get(
+                    MepinConstants.MEPIN_EXPIRY_TIME)) / retryInterval;
+            while (retry < retryCount) {
+                String responseString = new MepinTransactions().getTransaction(
+                        MepinConstants.MEPIN_GET_TRANSACTION_URL, transactionId,
                         authenticatorProperties.get(MepinConstants.MEPIN_CLIENT_ID),
-                        authenticatorProperties.get(MepinConstants.MEPIN_HEADER),
-                        authenticatorProperties.get(MepinConstants.MEPIN_MESSAGE),
-                        authenticatorProperties.get(MepinConstants.MEPIN_SHORT_MESSAGE),
-                        authenticatorProperties.get(MepinConstants.MEPIN_CONFIRMATION_POLICY),
-                        authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL),
-                        authenticatorProperties.get(MepinConstants.MEPIN_EXPIRY_TIME));
-                if (!transactionResponseString.equals(MepinConstants.FAILED)) {
-                    JsonObject transactionResponseJson = new JsonParser().parse(
-                            transactionResponseString).getAsJsonObject();
-                    String transactionId = transactionResponseJson.getAsJsonPrimitive(
-                            MepinConstants.MEPIN_TRANSACTION_ID).getAsString();
-                    String status = transactionResponseJson.getAsJsonPrimitive(
-                            MepinConstants.MEPIN_STATUS).getAsString();
-                    if (status.equalsIgnoreCase(MepinConstants.MEPIN_OK)) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Successfully created the MePIN transaction");
+                        authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
+                        authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD));
+                if (!responseString.equals(MepinConstants.FAILED)) {
+                    JsonObject transactionStatusResponse = new JsonParser().parse(
+                            responseString).getAsJsonObject();
+                    String transactionStatus = transactionStatusResponse.getAsJsonPrimitive(
+                            MepinConstants.MEPIN_TRANSACTION_STATUS).getAsString();
+                    JsonPrimitive allowObject = transactionStatusResponse.getAsJsonPrimitive(
+                            MepinConstants.MEPIN_ALLOW);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Transaction status :" + transactionStatus);
+                    }
+                    if (transactionStatus.equals(MepinConstants.MEPIN_COMPLETED)) {
+                        allowStatus = allowObject.getAsString();
+                        if (Boolean.parseBoolean(allowStatus)) {
+                            isAuthenticated = true;
+                            break;
                         }
-                        int retry = 0;
-                        int retryInterval = 1;
-                        int retryCount = Integer.parseInt(authenticatorProperties.get(
-                                MepinConstants.MEPIN_EXPIRY_TIME)) / retryInterval;
-                        while (retry < retryCount) {
-                            String responseString = new MepinTransactions().getTransaction(
-                                    MepinConstants.MEPIN_GET_TRANSACTION_URL, transactionId,
-                                    authenticatorProperties.get(MepinConstants.MEPIN_CLIENT_ID),
-                                    authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
-                                    authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD));
-                            if (!responseString.equals(MepinConstants.FAILED)) {
-                                JsonObject transactionStatusResponse = new JsonParser().parse(
-                                        responseString).getAsJsonObject();
-                                String transactionStatus = transactionStatusResponse.getAsJsonPrimitive(MepinConstants.MEPIN_TRANSACTION_STATUS).getAsString();
-                                JsonPrimitive allowObject = transactionStatusResponse.getAsJsonPrimitive(MepinConstants.MEPIN_ALLOW);
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Transaction status :" + transactionStatus);
-                                }
-                                if (transactionStatus.equals(MepinConstants.MEPIN_COMPLETED)) {
-                                    allowStatus = allowObject.getAsString();
-                                    if (Boolean.parseBoolean(allowStatus)) {
-                                        isAuthenticated = true;
-                                        break;
-                                    }
-                                } else if (transactionStatus.equals(MepinConstants.MEPIN_CANCELED)
-                                        || transactionStatus.equals(MepinConstants.MEPIN_EXPIRED)
-                                        || transactionStatus.equals(MepinConstants.MEPIN_ERROR)) {
-                                    break;
-                                }
-                            }
-                            Thread.sleep(1000);
-                            retry++;
-                        }
-                        if (isAuthenticated) {
-                            context.setSubject(AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(username));
-                        } else {
-                            throw new AuthenticationFailedException("Unable to confirm the MePIN transaction");
-                        }
+                    } else if (transactionStatus.equals(MepinConstants.MEPIN_CANCELED)
+                            || transactionStatus.equals(MepinConstants.MEPIN_EXPIRED)
+                            || transactionStatus.equals(MepinConstants.MEPIN_ERROR)) {
+                        break;
+                    }
+                }
+                Thread.sleep(1000);
+                retry++;
+            }
+        } catch (InterruptedException e) {
+            throw new AuthenticationFailedException("Interruption occurred while getting the MePIN transaction status", e);
+        } catch (IOException e) {
+            throw new AuthenticationFailedException("Error while geetting the response string from transaction", e);
+        }
+        return isAuthenticated;
+    }
+
+    /**
+     * Process Mepin login flow.
+     *
+     * @param context  the authentication context
+     * @param username the user name
+     * @throws AuthenticationFailedException
+     */
+    protected void processLoginWithMepin(AuthenticationContext context, Map<String, String> authenticatorProperties,
+                                         String username) throws AuthenticationFailedException {
+        try {
+            String mePinId;
+            mePinId = getMepinIdFromUserClaim(context, username);
+            if (StringUtils.isEmpty(mePinId)) {
+                log.error("First, You need to Link with Mepin");
+                return;
+            }
+            Boolean isAuthenticated;
+            String transactionResponseString = new MepinTransactions().createTransaction(
+                    mePinId, context.getContextIdentifier(),
+                    MepinConstants.MEPIN_CREATE_TRANSACTION_URL,
+                    authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
+                    authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
+                    authenticatorProperties.get(MepinConstants.MEPIN_CLIENT_ID),
+                    authenticatorProperties.get(MepinConstants.MEPIN_HEADER),
+                    authenticatorProperties.get(MepinConstants.MEPIN_MESSAGE),
+                    authenticatorProperties.get(MepinConstants.MEPIN_SHORT_MESSAGE),
+                    authenticatorProperties.get(MepinConstants.MEPIN_CONFIRMATION_POLICY),
+                    authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL),
+                    authenticatorProperties.get(MepinConstants.MEPIN_EXPIRY_TIME));
+            if (!transactionResponseString.equals(MepinConstants.FAILED)) {
+                JsonObject transactionResponseJson = new JsonParser().parse(
+                        transactionResponseString).getAsJsonObject();
+                String transactionId = transactionResponseJson.getAsJsonPrimitive(
+                        MepinConstants.MEPIN_TRANSACTION_ID).getAsString();
+                String status = transactionResponseJson.getAsJsonPrimitive(
+                        MepinConstants.MEPIN_STATUS).getAsString();
+                if (status.equalsIgnoreCase(MepinConstants.MEPIN_OK)) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Successfully created the MePIN transaction");
+                    }
+                    isAuthenticated = processMepinRetry(authenticatorProperties, transactionId);
+                    if (isAuthenticated) {
+                        context.setSubject(AuthenticatedUser.createLocalAuthenticatedUserFromSubjectIdentifier(username));
                     } else {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Error while creating the MePIN transaction");
-                        }
-                        throw new AuthenticationFailedException("Error while creating the MePIN transaction");
+                        throw new AuthenticationFailedException("Unable to confirm the MePIN transaction");
                     }
                 } else {
                     if (log.isDebugEnabled()) {
@@ -389,189 +611,241 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator
                     }
                     throw new AuthenticationFailedException("Error while creating the MePIN transaction");
                 }
-            } catch (UserProfileException e) {
-                throw new AuthenticationFailedException("Unable to get the associated user: " + e.getMessage(), e);
-            } catch (IOException e) {
-                throw new AuthenticationFailedException("Unable to create the MePIN transaction: " + e.getMessage(), e);
-            } catch (InterruptedException e) {
-                throw new AuthenticationFailedException("Interruption occurred while getting the MePIN transaction status" + e.getMessage(), e);
-            }
-        }
-    }
-
-    /**
-     * Get the friendly name of the Authenticator
-     */
-    @Override
-    public String getFriendlyName() {
-        return MepinConstants.AUTHENTICATOR_FRIENDLY_NAME;
-    }
-
-    /**
-     * Get the name of the Authenticator
-     */
-    @Override
-    public String getName() {
-        return MepinConstants.AUTHENTICATOR_NAME;
-    }
-
-    @Override
-    public AuthenticatorFlowStatus process(HttpServletRequest request, HttpServletResponse response,
-                                           AuthenticationContext context)
-            throws AuthenticationFailedException, LogoutFailedException {
-        if (context.isLogoutRequest()) {
-            return AuthenticatorFlowStatus.SUCCESS_COMPLETED;
-        }
-        return super.process(request, response, context);
-    }
-
-    /**
-     * Get the Context identifier sent with the request.
-     */
-    public String getContextIdentifier(HttpServletRequest request) {
-        return request.getParameter(FrameworkConstants.SESSION_DATA_KEY);
-    }
-
-    @Override
-    protected boolean retryAuthenticationEnabled() {
-        return true;
-    }
-
-    private AuthenticatedUser getLocalAuthenticatedUser(AuthenticationContext context) {
-        //Getting the last authenticated local user
-        AuthenticatedUser authenticatedUser = null;
-        for (Integer stepMap : context.getSequenceConfig().getStepMap().keySet()) {
-            if (context.getSequenceConfig().getStepMap().get(stepMap).getAuthenticatedUser() != null &&
-                    context.getSequenceConfig().getStepMap().get(stepMap).getAuthenticatedAutenticator()
-                            .getApplicationAuthenticator() instanceof LocalApplicationAuthenticator) {
-                authenticatedUser = context.getSequenceConfig().getStepMap().get(stepMap).getAuthenticatedUser();
-                break;
-            }
-        }
-
-        return authenticatedUser;
-    }
-
-    private AuthenticatedUser getFederateAuthenticatedUser(AuthenticationContext context,
-                                                           String authenticatedUserId)
-            throws ApplicationAuthenticatorException {
-        if (StringUtils.isEmpty(authenticatedUserId)) {
-            throw new ApplicationAuthenticatorException("Authenticated user identifier is empty");
-        }
-        AuthenticatedUser authenticatedUser =
-                AuthenticatedUser.createFederateAuthenticatedUserFromSubjectIdentifier(authenticatedUserId);
-        if (authenticatedUser.getUserStoreDomain() == null) {
-            authenticatedUser.setUserStoreDomain(UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME);
-        }
-        authenticatedUser.setUserName(authenticatedUserId);
-        if (log.isDebugEnabled()) {
-            log.debug("The authenticated subject identifier :" + authenticatedUser.getAuthenticatedSubjectIdentifier());
-        }
-        return authenticatedUser;
-    }
-
-    private void associateFederatedIdToLocalUsername(String authenticatedLocalUsername,
-                                                     AuthenticationContext context,
-                                                     AuthenticatedUser authenticatedUser)
-            throws UserProfileException {
-        StepConfig stepConfig;
-
-        for (int i = 1; i <= context.getSequenceConfig().getStepMap().size(); i++) {
-            stepConfig = context.getSequenceConfig().getStepMap().get(i);
-            for (int j = 0; j < stepConfig.getAuthenticatorList().size(); j++) {
-                if (stepConfig.getAuthenticatorList().get(j).getName().equals(getName())) {
-                    try {
-                        String idpName;
-                        String originalExternalIdpSubjectValueForThisStep =
-                                authenticatedUser.getAuthenticatedSubjectIdentifier();
-                        idpName = context.getExternalIdP().getIdPName();
-                        stepConfig.setAuthenticatedIdP(idpName);
-                        associateID(idpName,
-                                originalExternalIdpSubjectValueForThisStep, authenticatedLocalUsername, context);
-                        stepConfig.setAuthenticatedUser(authenticatedUser);
-                        context.getSequenceConfig().getStepMap().put(i, stepConfig);
-                    } catch (UserProfileException e) {
-                        throw new UserProfileException("Unable to continue with the federated ID ("
-                                + authenticatedUser.getAuthenticatedSubjectIdentifier() + "): " + e.getMessage(), e);
-                    }
-                    break;
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error while creating the MePIN transaction");
                 }
+                throw new AuthenticationFailedException("Error while creating the MePIN transaction");
             }
+        } catch (IOException e) {
+            throw new AuthenticationFailedException("Unable to create the MePIN transaction ", e);
+        } catch (org.wso2.carbon.user.core.UserStoreException e) {
+            throw new AuthenticationFailedException("Unable to get the associated user ", e);
         }
     }
 
-    private void associateID(String idpID, String associatedID, String userName, AuthenticationContext context)
-            throws UserProfileException {
-        Connection connection = IdentityDatabaseUtil.getDBConnection();
-        PreparedStatement prepStmt = null;
-        String sql;
-        String tenantDomain = context.getTenantDomain();
-        int tenantID = IdentityTenantUtil.getTenantId(tenantDomain);
-        String tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
-        String domainName = getDomainName(tenantAwareUsername);
-        tenantAwareUsername = getUsernameWithoutDomain(tenantAwareUsername);
-
-        try {
-            sql = "INSERT INTO IDN_ASSOCIATED_ID (TENANT_ID, IDP_ID, IDP_USER_ID, DOMAIN_NAME, " +
-                    "USER_NAME) VALUES " +
-                    "(? , (SELECT ID FROM IDP WHERE NAME = ? AND TENANT_ID = ? ), ? , ?, ?)";
-            prepStmt = connection.prepareStatement(sql);
-            prepStmt.setInt(1, tenantID);
-            prepStmt.setString(2, idpID);
-            prepStmt.setInt(3, tenantID);
-            prepStmt.setString(4, associatedID);
-            prepStmt.setString(5, domainName);
-            prepStmt.setString(6, tenantAwareUsername);
-            prepStmt.execute();
-            connection.commit();
-        } catch (SQLException e) {
-            throw new UserProfileException("Error occurred while persisting the federated user ID", e);
-        } finally {
-            IdentityDatabaseUtil.closeAllConnections(connection, (ResultSet) null, prepStmt);
-        }
-    }
-
-    private static String getDomainName(String username) {
-        int index = username.indexOf("/");
-        return index < 0 ? "PRIMARY" : username.substring(0, index);
-    }
-
-    private static String getUsernameWithoutDomain(String username) {
-        int index = username.indexOf("/");
-        return index < 0 ? username : username.substring(index + 1, username.length());
-    }
-
-    public String getMepinIdAssociatedWithUsername(String idpID, String username, AuthenticationContext context)
-            throws UserProfileException {
-        Connection connection = IdentityDatabaseUtil.getDBConnection();
-        PreparedStatement prepStmt = null;
-        ResultSet resultSet;
-        String sql;
-        String mepinId;
-        String tenantDomain = context.getTenantDomain();
-        int tenantID = IdentityTenantUtil.getTenantId(tenantDomain);
-        try {
-            sql = "SELECT IDP_USER_ID  FROM IDN_ASSOCIATED_ID WHERE TENANT_ID = ? AND IDP_ID = (SELECT ID " +
-                    "FROM IDP WHERE NAME = ? AND TENANT_ID = ?) AND USER_NAME = ?";
-
-            prepStmt = connection.prepareStatement(sql);
-            prepStmt.setInt(1, tenantID);
-            prepStmt.setString(2, idpID);
-            prepStmt.setInt(3, tenantID);
-            prepStmt.setString(4, username);
-
-            resultSet = prepStmt.executeQuery();
-            connection.commit();
-
-            if (resultSet.next()) {
-                mepinId = resultSet.getString(1);
-                return mepinId;
+    /**
+     * Process the response of the MePIN end-point
+     */
+    @Override
+    protected void processAuthenticationResponse(HttpServletRequest request, HttpServletResponse response,
+                                                 AuthenticationContext context) throws AuthenticationFailedException {
+        String username = null;
+        Map<String, String> authenticatorProperties = context.getAuthenticatorProperties();
+        if ((!StringUtils.isEmpty(request.getParameter(MepinConstants.IS_SECOND_STEP))
+                && !StringUtils.isEmpty(request.getParameter(MepinConstants.MEPIN_ACCESSTOKEN)))) {
+            if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
+                username = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
             }
-        } catch (SQLException e) {
-            throw new UserProfileException("Error occurred while getting the associated MePIN ID", e);
-        } finally {
-            IdentityDatabaseUtil.closeAllConnections(connection, null, prepStmt);
+            processAssociationFlow(request, authenticatorProperties, context, username);
+        } else if (request.getParameter(MepinConstants.IS_SECOND_STEP).equals(MepinConstants.TRUE)) {
+            username = String.valueOf(context.getProperty(MepinConstants.USER_NAME));
+            processLoginWithMepin(context, authenticatorProperties, username);
         }
-        return null;
+    }
+
+    /**
+     * Add Mepin id to mepinid claim for the association the mepin id with user name.
+     *
+     * @param userName the user name
+     * @param context  the authentication context
+     */
+    private void addMepinIdToUserClaim(String userName, String mepinId, AuthenticationContext context)
+            throws org.wso2.carbon.user.core.UserStoreException, AuthenticationFailedException {
+        String tenantAwareUsername;
+        Map<String, String> claimMap = new HashMap<String, String>();
+        tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
+        claimMap.put(MepinConstants.MEPIN_ID_CLAIM, mepinId);
+        UserStoreManager userStoreManager = getUserStoreManager(context.getTenantDomain());
+        userStoreManager.setUserClaimValues(tenantAwareUsername, claimMap, null);
+        if (log.isDebugEnabled()) {
+            log.debug("The claim uri" + MepinConstants.MEPIN_ID_CLAIM + "of " + tenantAwareUsername
+                    + " updated with the mepin id " + mepinId);
+        }
+    }
+
+    /**
+     * Get Mepin id from the mepinid claim of the user.
+     *
+     * @param userName the user name
+     * @param context  the authentication context
+     */
+    private String getMepinIdFromUserClaim(AuthenticationContext context, String userName)
+            throws org.wso2.carbon.user.core.UserStoreException, AuthenticationFailedException {
+        String tenantAwareUsername, mepinId;
+        UserStoreManager userStoreManager;
+
+        // find the authenticated user.
+        AuthenticatedUser authenticatedUser = (AuthenticatedUser) context.getProperty(MepinConstants.AUTHENTICATED_USER);
+        if (authenticatedUser == null) {
+            throw new AuthenticationFailedException
+                    ("Authentication failed!. Cannot proceed further without identifying the user");
+        }
+        try {
+            tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
+            userStoreManager = getUserStoreManager(context.getTenantDomain());
+            mepinId = userStoreManager.getUserClaimValue(tenantAwareUsername,
+                    MepinConstants.MEPIN_ID_CLAIM, null);
+        } catch (org.wso2.carbon.user.core.UserStoreException e) {
+            throw new AuthenticationFailedException("Error occurred while loading user claim - "
+                    + MepinConstants.MEPIN_ID_CLAIM, e);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("The claim uri " + MepinConstants.MEPIN_ID_CLAIM + " of " + userName + " updated with mepin id "
+                    + mepinId);
+        }
+        return mepinId;
+    }
+
+    /**
+     * Get the user store manager from user realm service.
+     *
+     * @param tenantDomain the tenant domain
+     * @return the user store manager
+     * @throws AuthenticationFailedException
+     */
+    private UserStoreManager getUserStoreManager(String tenantDomain)
+            throws AuthenticationFailedException {
+        int tenantId;
+        UserStoreManager userStoreManager;
+        tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
+        RealmService realmService = IdentityTenantUtil.getRealmService();
+        UserRealm userRealm;
+        try {
+            userRealm = realmService.getTenantUserRealm(tenantId);
+            userStoreManager = (UserStoreManager) userRealm.getUserStoreManager();
+        } catch (UserStoreException e) {
+            throw new AuthenticationFailedException("Error occurred while loading user manager from user realm" +
+                    "for tenant domain " + tenantDomain, e);
+        }
+        return userStoreManager;
+    }
+
+    /**
+     * Check whether Mepin is disable by user.
+     *
+     * @param username the Username
+     * @param context  the AuthenticationContext
+     * @return true or false
+     * @throws MepinException
+     */
+    private boolean isMepinDisableForUser(String username, AuthenticationContext context)
+            throws MepinException {
+        UserRealm userRealm;
+        try {
+            String tenantDomain = MultitenantUtils.getTenantDomain(username);
+            int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
+            RealmService realmService = IdentityTenantUtil.getRealmService();
+            userRealm = realmService.getTenantUserRealm(tenantId);
+            username = MultitenantUtils.getTenantAwareUsername(String.valueOf(username));
+            boolean isEnableORDisableLocalUserClaim = isMepinDisableByUser(context);
+            if (userRealm != null) {
+                if (isEnableORDisableLocalUserClaim) {
+                    String isMepinEnabledByUser = userRealm.getUserStoreManager().getUserClaimValue(username,
+                            MepinConstants.USER_MEPIN_DISABLED_CLAIM_URI, null);
+                    return Boolean.parseBoolean(isMepinEnabledByUser);
+                }
+            } else {
+                throw new MepinException("Cannot find the user realm for the given tenant domain : " + tenantDomain);
+            }
+        } catch (UserStoreException e) {
+            throw new MepinException("Failed while trying to access userRealm of the user : " + username, e);
+        }
+        return false;
+    }
+
+    /**
+     * Check whether Mepin is mandatory or not.
+     *
+     * @param context the authentication context
+     * @return status of user's mepin authentication
+     */
+    private boolean isMepinMandatory(AuthenticationContext context) {
+        boolean isMepinMandatory = false;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.IS_MEPIN_MANDATORY)) {
+            isMepinMandatory = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_MANDATORY));
+        } else if ((context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)) != null) {
+            isMepinMandatory = Boolean.parseBoolean(String.valueOf
+                    (context.getProperty(MepinConstants.IS_MEPIN_MANDATORY)));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is mandatory : " + isMepinMandatory);
+        }
+        return isMepinMandatory;
+    }
+
+    /**
+     * Check whether user enable the second factor or not.
+     *
+     * @param context the authentication context
+     * @return status of user's mepin authentication
+     */
+    private boolean isMepinDisableByUser(AuthenticationContext context) {
+        boolean isMepinDisableByUser = false;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) {
+            isMepinDisableByUser = Boolean.parseBoolean(getMepinParameters().get
+                    (MepinConstants.IS_MEPIN_ENABLE_BY_USER));
+        } else if ((context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)) != null) {
+            isMepinDisableByUser = Boolean.parseBoolean(String.valueOf
+                    (context.getProperty(MepinConstants.IS_MEPIN_ENABLE_BY_USER)));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin authentication is disabled by user : " + isMepinDisableByUser);
+        }
+        return isMepinDisableByUser;
+    }
+
+    /**
+     * Get the error page url from the application-authentication.xml file.
+     *
+     * @param context the authentication context
+     * @return the error page
+     */
+    private String getErrorPageFromXMLFile(AuthenticationContext context) {
+        String errorPage = null;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) {
+            errorPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL);
+        } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL)) != null) {
+            errorPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ERROR_PAGE_URL));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The error page is " + errorPage);
+        }
+        return errorPage;
+    }
+
+    /**
+     * Get the mepin page url from the application-authentication.xml file.
+     *
+     * @param context the AuthenticationContext
+     * @return mepin page
+     */
+    private String getMepinPageFromXMLFile(AuthenticationContext context) {
+        String mepinPage = null;
+        String tenantDomain = context.getTenantDomain();
+        Object propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
+        if ((propertiesFromLocal != null || tenantDomain.equals(MepinConstants.SUPER_TENANT)) &&
+                getMepinParameters().containsKey(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) {
+            mepinPage = getMepinParameters().get(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL);
+        } else if ((context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL)) != null) {
+            mepinPage = String.valueOf
+                    (context.getProperty(MepinConstants.MEPIN_AUTHENTICATION_ENDPOINT_URL));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("The mepin page is " + mepinPage);
+        }
+        return mepinPage;
     }
 }

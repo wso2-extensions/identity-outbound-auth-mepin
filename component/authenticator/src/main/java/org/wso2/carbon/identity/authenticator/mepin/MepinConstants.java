@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ *  Copyright (c) 2017, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  *  WSO2 Inc. licenses this file to you under the Apache License,
  *  Version 2.0 (the "License"); you may not use this file except
@@ -40,7 +40,6 @@ public class MepinConstants {
     public static final String MEPIN_HEADER = "Header";
     public static final String MEPIN_CONFIRMATION_POLICY = "ConfirmationPolicy";
     public static final String MEPIN_QUERY = "identifier=%s&short_message=%s&header=%s&message=%s&client_id=%s&account=%s&expiry_time=%s&callback_url=%s&confirmation_policy=%s";
-    public static final String MEPIN_ID_NOT_FOUND = "MePIN Id is not found. Authentication failed";
     public static final String MEPIN_TRANSACTION_ID = "transaction_id";
     public static final String MEPIN_TRANSACTION_STATUS = "transaction_status";
     public static final String MEPIN_ALLOW = "allow";
@@ -62,11 +61,24 @@ public class MepinConstants {
     public static final String HTTP_POST_CONTENT_TYPE = "application/x-www-form-urlencoded;charset=UTF-8";
     public static final String CHARSET = "UTF-8";
     public static final String HTTP_ACCEPT_CHARSET = "Accept-Charset";
-    public static final String USERNAME = "username";
-    public static final String PASSWORD = "password";
     public static final String TRUE = "true";
     public static final String FAILED = "Failed";
     public static final String AUTH_HEADER = "authHeader";
     public static final String IS_SECOND_STEP = "isSecondStep";
-
+    public static final String AUTHENTICATION = "authentication";
+    public static final String BASIC = "basic";
+    public static final String SUPER_TENANT = "carbon.super";
+    public static final String FEDERETOR = "federator";
+    public static final String USER_NAME = "username";
+    public static final String AUTHENTICATED_USER = "authenticatedUser";
+    public static final String USER_MEPIN_DISABLED_CLAIM_URI = "http://wso2.org/claims/identity/mepin_disabled";
+    public static final String IS_MEPIN_MANDATORY = "MepinMandatory";
+    public static final String IS_MEPIN_ENABLE_BY_USER = "MepinEnableByUserClaim";
+    public static final String MEPIN_AUTHENTICATION_ENDPOINT_URL = "MepinAuthenticationEndpointURL";
+    public static final String MEPIN_AUTHENTICATION_ERROR_PAGE_URL = "MepinAuthenticationEndpointErrorPage";
+    public static final String ERROR_PAGE = "mepinauthenticationendpoint/mepinError.jsp";
+    public static final String NAME_OF_AUTHENTICATORS = "authenticators=";
+    public static final String ERROR_MEPIN_DISABLE = "&authFailure=true&authFailureMsg=mepin.disable";
+    public static final String MEPIN_ID_CLAIM = "http://wso2.org/claims/identity/mepinid";
+    public static final String ACCESS_TOKEN_QUERY_PARAM = "access_token=%s";
 }
