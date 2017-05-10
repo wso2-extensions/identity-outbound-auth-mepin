@@ -1,5 +1,5 @@
 <%--
-  ~ Copyright (c) 2017, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+  ~ Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
   ~
   ~ WSO2 Inc. licenses this file to you under the Apache License,
   ~ Version 2.0 (the "License"); you may not use this file except
@@ -24,7 +24,9 @@
 <%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
 <%@ page import="org.wso2.carbon.identity.application.authentication.endpoint.util.TenantDataManager" %>
 
-    <%
+<fmt:bundle basename="org.wso2.carbon.identity.application.authentication.endpoint.i18n.Resources">
+
+   <%
         request.getSession().invalidate();
         String queryString = request.getQueryString();
         Map<String, String> idpAuthenticatorMapping = null;
@@ -60,16 +62,25 @@
         <link href="libs/bootstrap_3.3.5/css/bootstrap.min.css" rel="stylesheet">
         <link href="css/Roboto.css" rel="stylesheet">
         <link href="css/custom-common.css" rel="stylesheet">
-
-        <script src="js/scripts.js"></script>
         <script src="assets/js/jquery-1.7.1.min.js"></script>
+
+        <script type="text/javascript">
+               (function(){
+                 var newscript = document.createElement('script');
+                    newscript.type = 'text/javascript';
+                    newscript.async = true;
+                    newscript.src = 'js/scripts.js';
+                 (document.getElementsByTagName('head')[0]||document.getElementsByTagName('body')[0]).appendChild(newscript);
+               })();
+        </script>
+	    <script src="https://mepin.com/javascripts/mepinlogin.js"></script>
         <!--[if lt IE 9]>
         <script src="js/html5shiv.min.js"></script>
         <script src="js/respond.min.js"></script>
         <![endif]-->
     </head>
 
-    <body>
+    <body onload="getLoginDiv()" class="sticky-footer">
 
     <!-- header -->
     <header class="header header-default">
@@ -86,7 +97,7 @@
     </header>
 
     <!-- page content -->
-    <div class="container-fluid body-wrapper">
+   <div class="container-fluid body-wrapper">
 
         <div class="row">
             <div class="col-md-12">
@@ -131,3 +142,4 @@
     <script src="libs/bootstrap_3.3.5/js/bootstrap.min.js"></script>
     </body>
     </html>
+</fmt:bundle>
