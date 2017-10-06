@@ -16,10 +16,14 @@
  *  under the License.
  *
  */
-package src.test.java.org.wso2.carbon.identity.application.authenticator.mepin;
+package org.wso2.carbon.identity.application.authenticator.mepin;
 
 /**
- * TODO: Class level javadoc comment.
+ * Constant class
  */
 public class MepinAuenticatorTestConstants {
+    public static final int TENANT_ID = -1234 ;
+    public static final String USER_NAME = "admin";
+    public static final String MEPIN_ID = "keetz";
+    public static final String TENANT_DOMAIN = "wso2.org";
 }
