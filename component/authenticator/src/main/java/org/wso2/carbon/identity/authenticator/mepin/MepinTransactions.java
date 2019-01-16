@@ -291,7 +291,7 @@ public class MepinTransactions {
      * @param password    the password
      * @param appId       the application id created at the mepin portal
      * @param accessToken the access token
-     * @return
+     * @return the user information
      * @throws AuthenticationFailedException
      */
     protected String getUserInformation(String username, String password, String appId, String accessToken)
