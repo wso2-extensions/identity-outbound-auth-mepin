@@ -106,6 +106,7 @@ public class MepinTransactions {
         String encoding = new String(Base64.encodeBase64(authStr.getBytes()));
         String responseString = "";
         HttpsURLConnection connection = null;
+        OutputStream outputStream = null;
         URLConnection urlConnection;
         try {
             urlConnection = new URL(url).openConnection();
@@ -116,10 +117,9 @@ public class MepinTransactions {
                 connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_POST_CONTENT_TYPE);
                 connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION,
                         MepinConstants.HTTP_AUTHORIZATION_BASIC + encoding);
-                OutputStream outputStream = connection.getOutputStream();
+                outputStream = connection.getOutputStream();
                 outputStream.write(payload.getBytes());
                 outputStream.flush();
-                outputStream.close();
                 int status = connection.getResponseCode();
                 if (log.isDebugEnabled()) {
                     log.debug("MePIN Response Code :" + status);
@@ -143,6 +143,9 @@ public class MepinTransactions {
         } finally {
             if (connection != null) {
                 connection.disconnect();
+            }
+            if (outputStream != null) {
+                outputStream.close();
             }
         }
         return responseString;
