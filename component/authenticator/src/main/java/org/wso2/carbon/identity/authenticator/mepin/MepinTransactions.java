@@ -36,6 +36,7 @@ import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.Random;
+import java.util.UUID;
 
 /**
  * Mepin transactions.
@@ -73,8 +74,7 @@ public class MepinTransactions {
         MepinTransaction mepinTransaction = new MepinTransaction();
         mepinTransaction.setAction(MepinConstants.TRANSACTIONS_CREATE);
         mepinTransaction.setApp_id(appId);
-        //set as a long random hex string, 32 bytes.
-        mepinTransaction.setIdentifier(getRandomHexString());
+        mepinTransaction.setIdentifier(UUID.randomUUID().toString());
         mepinTransaction.setMepin_id(mepinID);
         mepinTransaction.setShort_message(shortMessage);
         mepinTransaction.setHeader(header);
@@ -149,20 +149,6 @@ public class MepinTransactions {
             }
         }
         return responseString;
-    }
-
-    /**
-     * Generates a random hex string with 32 bytes.
-     *
-     * @return random hex string
-     */
-    private String getRandomHexString() {
-        Random r = new Random();
-        StringBuilder sb = new StringBuilder();
-        while (sb.length() < 32) {
-            sb.append(Integer.toHexString(r.nextInt()));
-        }
-        return sb.toString().substring(0, 32);
     }
 
     /**
