@@ -23,9 +23,12 @@ public class MepinConstants {
     public static final String AUTHENTICATOR_NAME = "MePINAuthenticator";
     public static final String AUTHENTICATOR_FRIENDLY_NAME = "MePIN";
 
-    public static final String MEPIN_GET_USER_INFO_URL = "https://api.mepin.com/simple_api/user_info";
-    public static final String MEPIN_CREATE_TRANSACTION_URL = "https://api.mepin.com/transactions/create";
-    public static final String MEPIN_GET_TRANSACTION_URL = "https://api.mepin.com/transactions/show";
+    public static final String MEPIN_ENDPOINT = "https://api.mepin.com/4.0/s/endpoint";
+
+    //mepin actions
+    public static final String USER_INFO_GET = "userinfo/get";
+    public static final String TRANSACTIONS_GET = "transactions/get";
+    public static final String TRANSACTIONS_CREATE = "transactions/create";
 
     public static final String MEPIN_APPICATION_ID = "ApplicationId";
     public static final String MEPIN_USERNAME = "Username";
@@ -52,8 +55,10 @@ public class MepinConstants {
     public static final String MEPIN_LOGIN = "mepinLogin";
     public static final String LOGIN_PAGE = "authenticationendpoint/login.do";
     public static final String MEPIN_PAGE = "mepinauthenticationendpoint/mepin.jsp";
+    public static final String MEPIN_DATA = "mepin_data=";
 
     public static final String HTTP_GET = "GET";
+    public static final String HTTP_POST = "POST";
     public static final String HTTP_ACCEPT = "Accept";
     public static final String HTTP_AUTHORIZATION = "Authorization";
     public static final String HTTP_AUTHORIZATION_BASIC = "Basic ";

@@ -19,20 +19,24 @@
 
 package org.wso2.carbon.identity.authenticator.mepin;
 
+import com.google.gson.Gson;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.authentication.framework.exception.AuthenticationFailedException;
+import org.wso2.carbon.identity.authenticator.mepin.model.MepinTransaction;
+import org.wso2.carbon.identity.authenticator.mepin.model.MepinUserInfo;
 
 import javax.net.ssl.HttpsURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
-import java.net.URLEncoder;
-import java.io.OutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.Random;
+import java.util.UUID;
 
 /**
  * Mepin transactions.
@@ -45,11 +49,10 @@ public class MepinTransactions {
      * Create the transaction for the Mepin request.
      *
      * @param mepinID            the mepin id
-     * @param sessionID          the session id
      * @param url                the url
      * @param username           the user name
      * @param password           the password
-     * @param clientId           the client id
+     * @param appId              the application id created at the mepin portal
      * @param header             the header
      * @param message            the message
      * @param shortMessage       short message
@@ -58,24 +61,29 @@ public class MepinTransactions {
      * @param expiryTime         the expiry time
      * @return the transaction response
      * @throws IOException
+     * @throws AuthenticationFailedException
      */
-    protected String createTransaction(String mepinID, String sessionID, String url,
-                                       String username, String password, String clientId,
+    protected String createTransaction(String mepinID, String url,
+                                       String username, String password, String appId,
                                        String header, String message, String shortMessage,
                                        String confirmationPolicy, String callbackUrl,
                                        String expiryTime) throws IOException, AuthenticationFailedException {
         if (log.isDebugEnabled()) {
             log.debug("Started handling transaction creation");
         }
-        String query = String.format(MepinConstants.MEPIN_QUERY, URLEncoder.encode(sessionID, MepinConstants.CHARSET),
-                URLEncoder.encode(shortMessage, MepinConstants.CHARSET),
-                URLEncoder.encode(header, MepinConstants.CHARSET), URLEncoder.encode(message, MepinConstants.CHARSET),
-                URLEncoder.encode(clientId, MepinConstants.CHARSET),
-                URLEncoder.encode(mepinID, MepinConstants.CHARSET), URLEncoder.encode(expiryTime, MepinConstants.CHARSET),
-                URLEncoder.encode(callbackUrl, MepinConstants.CHARSET),
-                URLEncoder.encode(confirmationPolicy, MepinConstants.CHARSET)
-        );
-        String response = postRequest(url, query, username, password);
+        MepinTransaction mepinTransaction = new MepinTransaction();
+        mepinTransaction.setAction(MepinConstants.TRANSACTIONS_CREATE);
+        mepinTransaction.setApp_id(appId);
+        mepinTransaction.setIdentifier(UUID.randomUUID().toString());
+        mepinTransaction.setMepin_id(mepinID);
+        mepinTransaction.setShort_message(shortMessage);
+        mepinTransaction.setHeader(header);
+        mepinTransaction.setMessage(message);
+        mepinTransaction.setConfirmation_policy(confirmationPolicy);
+        mepinTransaction.setExpiry_time(expiryTime);
+        String mepinTransactionStr = new Gson().toJson(mepinTransaction);
+        String postData = MepinConstants.MEPIN_DATA + mepinTransactionStr;
+        String response = postRequest(url, postData, username, password);
         if (log.isDebugEnabled()) {
             log.debug("MePin JSON Response: " + response);
         }
@@ -86,30 +94,32 @@ public class MepinTransactions {
      * Send post request with basic authentication.
      *
      * @param url      the url
-     * @param query    the query
+     * @param payload    the payload string
      * @param username the user name
      * @param password the password
      * @return the response
      * @throws IOException
      */
-    protected String postRequest(String url, String query, String username, String password)
+    protected String postRequest(String url, String payload, String username, String password)
             throws IOException, AuthenticationFailedException {
         String authStr = username + ":" + password;
         String encoding = new String(Base64.encodeBase64(authStr.getBytes()));
         String responseString = "";
         HttpsURLConnection connection = null;
+        OutputStream outputStream = null;
         URLConnection urlConnection;
         try {
             urlConnection = new URL(url).openConnection();
             if (urlConnection instanceof HttpsURLConnection) {
                 connection = (HttpsURLConnection) urlConnection;
                 connection.setDoOutput(true);
-                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT_CHARSET, MepinConstants.CHARSET);
-                connection.setRequestProperty(MepinConstants.HTTP_CONTENT_TYPE, MepinConstants.HTTP_POST_CONTENT_TYPE);
-                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC
-                        + encoding);
-                OutputStream output = connection.getOutputStream();
-                output.write(query.getBytes(MepinConstants.CHARSET));
+                connection.setRequestMethod(MepinConstants.HTTP_POST);
+                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_POST_CONTENT_TYPE);
+                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION,
+                        MepinConstants.HTTP_AUTHORIZATION_BASIC + encoding);
+                outputStream = connection.getOutputStream();
+                outputStream.write(payload.getBytes());
+                outputStream.flush();
                 int status = connection.getResponseCode();
                 if (log.isDebugEnabled()) {
                     log.debug("MePIN Response Code :" + status);
@@ -133,6 +143,9 @@ public class MepinTransactions {
         } finally {
             if (connection != null) {
                 connection.disconnect();
+            }
+            if (outputStream != null) {
+                outputStream.close();
             }
         }
         return responseString;
@@ -178,17 +191,23 @@ public class MepinTransactions {
      *
      * @param url           the url
      * @param transactionId the transaction Id
-     * @param clientId      the client id
+     * @param appId      the client id
      * @param username      the user name
      * @param password      the password
      * @return the response String
      * @throws IOException
      */
-    protected String getTransaction(String url, String transactionId, String clientId, String username, String password)
+    protected String getTransaction(String url, String transactionId, String appId, String username, String password)
             throws IOException {
         if (log.isDebugEnabled()) {
             log.debug("Started handling transaction creation");
         }
+        MepinTransaction mepinTransaction = new MepinTransaction();
+        mepinTransaction.setAction(MepinConstants.TRANSACTIONS_GET);
+        mepinTransaction.setApp_id(appId);
+        mepinTransaction.setTransaction_id(transactionId);
+        String getTransactionStr = new Gson().toJson(mepinTransaction);
+        String postData = MepinConstants.MEPIN_DATA + getTransactionStr;
         String authString = username + ":" + password;
         String encoding = new String(Base64.encodeBase64(authString.getBytes()));
         HttpsURLConnection connection = null;
@@ -196,8 +215,7 @@ public class MepinTransactions {
         BufferedReader bufferedReader = null;
         String responseString = "";
         InputStream inputStream = null;
-        url = url + "?transaction_id=" + URLEncoder.encode(transactionId, MepinConstants.CHARSET) + "&client_id="
-                + URLEncoder.encode(clientId, MepinConstants.CHARSET);
+        OutputStream outputStream = null;
         if (log.isDebugEnabled()) {
             log.debug("The transaction url is " + url);
         }
@@ -205,10 +223,15 @@ public class MepinTransactions {
             urlConnection = new URL(url).openConnection();
             if (urlConnection instanceof HttpsURLConnection) {
                 connection = (HttpsURLConnection) urlConnection;
-                connection.setRequestMethod(MepinConstants.HTTP_GET);
-                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_CONTENT_TYPE);
+                connection.setRequestMethod(MepinConstants.HTTP_POST);
+                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_POST_CONTENT_TYPE);
                 connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC
                         + encoding);
+                connection.setDoOutput(true);
+                outputStream = connection.getOutputStream();
+                outputStream.write(postData.getBytes());
+                outputStream.flush();
+
                 String response = "";
                 int statusCode = connection.getResponseCode();
                 if ((statusCode == 200) || (statusCode == 201)) {
@@ -240,6 +263,9 @@ public class MepinTransactions {
             if (inputStream != null) {
                 inputStream.close();
             }
+            if (outputStream != null) {
+                outputStream.close();
+            }
             if (connection != null) {
                 connection.disconnect();
             }
@@ -252,27 +278,41 @@ public class MepinTransactions {
      *
      * @param username    the user name
      * @param password    the password
+     * @param appId       the application id created at the mepin portal
      * @param accessToken the access token
      * @return the user information
      * @throws AuthenticationFailedException
      */
-    protected String getUserInformation(String username, String password, String accessToken)
+    protected String getUserInformation(String username, String password, String appId, String accessToken)
             throws AuthenticationFailedException {
         String responseString = "";
         HttpsURLConnection connection = null;
+        OutputStream outputStream = null;
         URLConnection urlConnection;
         String authStr = username + ":" + password;
         String encoding = new String(Base64.encodeBase64(authStr.getBytes()));
+
         try {
-            String query = String.format(MepinConstants.ACCESS_TOKEN_QUERY_PARAM, URLEncoder.encode(accessToken,
-                    MepinConstants.CHARSET));
-            urlConnection = new URL(MepinConstants.MEPIN_GET_USER_INFO_URL + "?" + query).openConnection();
+            urlConnection = new URL(MepinConstants.MEPIN_ENDPOINT).openConnection();
             if (urlConnection instanceof HttpsURLConnection) {
                 connection = (HttpsURLConnection) urlConnection;
-                connection.setRequestMethod(MepinConstants.HTTP_GET);
-                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_CONTENT_TYPE);
-                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION, MepinConstants.HTTP_AUTHORIZATION_BASIC
-                        + encoding);
+                connection.setRequestMethod(MepinConstants.HTTP_POST);
+                connection.setRequestProperty(MepinConstants.HTTP_ACCEPT, MepinConstants.HTTP_POST_CONTENT_TYPE);
+                connection.setRequestProperty(MepinConstants.HTTP_AUTHORIZATION,
+                        MepinConstants.HTTP_AUTHORIZATION_BASIC + encoding);
+                //construct user info form body
+                MepinUserInfo userInfo = new MepinUserInfo();
+                userInfo.setAction(MepinConstants.USER_INFO_GET);
+                userInfo.setApp_id(appId);
+                userInfo.setAccess_token(accessToken);
+                String userInfoStr = new Gson().toJson(userInfo);
+                String postData = MepinConstants.MEPIN_DATA + userInfoStr;
+                //set user info request body
+                connection.setDoOutput(true);
+                outputStream = connection.getOutputStream();
+                outputStream.write(postData.getBytes());
+                outputStream.flush();
+
                 int status = connection.getResponseCode();
                 if (log.isDebugEnabled()) {
                     log.debug("MePIN Response Code :" + status);
@@ -286,6 +326,13 @@ public class MepinTransactions {
         } catch (IOException e) {
             throw new AuthenticationFailedException("Error while get user information from mepin ", e);
         } finally {
+            if(outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    log.error("Error while closing the output stream for user info request.", e);
+                }
+            }
             if (connection != null) {
                 connection.disconnect();
             }

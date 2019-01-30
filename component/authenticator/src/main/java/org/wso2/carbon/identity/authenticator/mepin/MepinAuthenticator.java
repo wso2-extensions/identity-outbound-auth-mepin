@@ -48,6 +48,7 @@ import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.user.core.claim.Claim;
 import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
@@ -481,6 +482,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
             String responseString = new MepinTransactions().getUserInformation(
                     authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
                     authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
+                    authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID),
                     accessToken);
             if (!responseString.equals(MepinConstants.FAILED)) {
                 JsonObject responseJson = new JsonParser().parse(responseString).getAsJsonObject();
@@ -522,8 +524,8 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                     MepinConstants.MEPIN_EXPIRY_TIME)) / retryInterval;
             while (retry < retryCount) {
                 String responseString = new MepinTransactions().getTransaction(
-                        MepinConstants.MEPIN_GET_TRANSACTION_URL, transactionId,
-                        authenticatorProperties.get(MepinConstants.MEPIN_CLIENT_ID),
+                        MepinConstants.MEPIN_ENDPOINT, transactionId,
+                        authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID),
                         authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
                         authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD));
                 if (!responseString.equals(MepinConstants.FAILED)) {
@@ -576,18 +578,17 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
                 return;
             }
             Boolean isAuthenticated;
-            String transactionResponseString = new MepinTransactions().createTransaction(
-                    mePinId, context.getContextIdentifier(),
-                    MepinConstants.MEPIN_CREATE_TRANSACTION_URL,
-                    authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
-                    authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
-                    authenticatorProperties.get(MepinConstants.MEPIN_CLIENT_ID),
-                    authenticatorProperties.get(MepinConstants.MEPIN_HEADER),
-                    authenticatorProperties.get(MepinConstants.MEPIN_MESSAGE),
-                    authenticatorProperties.get(MepinConstants.MEPIN_SHORT_MESSAGE),
-                    authenticatorProperties.get(MepinConstants.MEPIN_CONFIRMATION_POLICY),
-                    authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL),
-                    authenticatorProperties.get(MepinConstants.MEPIN_EXPIRY_TIME));
+            String transactionResponseString = new MepinTransactions()
+                    .createTransaction(mePinId, MepinConstants.MEPIN_ENDPOINT,
+                            authenticatorProperties.get(MepinConstants.MEPIN_USERNAME),
+                            authenticatorProperties.get(MepinConstants.MEPIN_PASSWORD),
+                            authenticatorProperties.get(MepinConstants.MEPIN_APPICATION_ID),
+                            authenticatorProperties.get(MepinConstants.MEPIN_HEADER),
+                            authenticatorProperties.get(MepinConstants.MEPIN_MESSAGE),
+                            authenticatorProperties.get(MepinConstants.MEPIN_SHORT_MESSAGE),
+                            authenticatorProperties.get(MepinConstants.MEPIN_CONFIRMATION_POLICY),
+                            authenticatorProperties.get(MepinConstants.MEPIN_CALLBACK_URL),
+                            authenticatorProperties.get(MepinConstants.MEPIN_EXPIRY_TIME));
             if (!transactionResponseString.equals(MepinConstants.FAILED)) {
                 JsonObject transactionResponseJson = new JsonParser().parse(
                         transactionResponseString).getAsJsonObject();
@@ -672,7 +673,7 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
      */
     private String getMepinIdFromUserClaim(AuthenticationContext context, String userName)
             throws org.wso2.carbon.user.core.UserStoreException, AuthenticationFailedException {
-        String tenantAwareUsername, mepinId;
+        String tenantAwareUsername, mepinId = null;
         UserStoreManager userStoreManager;
 
         // find the authenticated user.
@@ -684,8 +685,13 @@ public class MepinAuthenticator extends AbstractApplicationAuthenticator impleme
         try {
             tenantAwareUsername = MultitenantUtils.getTenantAwareUsername(userName);
             userStoreManager = getUserStoreManager(context.getTenantDomain());
-            mepinId = userStoreManager.getUserClaimValue(tenantAwareUsername,
-                    MepinConstants.MEPIN_ID_CLAIM, null);
+            Claim[] userClaimValues = userStoreManager.getUserClaimValues(tenantAwareUsername, null);
+            for (Claim userClaimValue : userClaimValues) {
+                if (MepinConstants.MEPIN_ID_CLAIM.equals(userClaimValue.getClaimUri())) {
+                    mepinId = userClaimValue.getValue();
+                    break;
+                }
+            }
         } catch (org.wso2.carbon.user.core.UserStoreException e) {
             throw new AuthenticationFailedException("Error occurred while loading user claim - "
                     + MepinConstants.MEPIN_ID_CLAIM, e);
