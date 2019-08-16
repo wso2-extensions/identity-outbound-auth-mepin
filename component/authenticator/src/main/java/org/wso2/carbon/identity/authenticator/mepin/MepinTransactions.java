@@ -43,7 +43,7 @@ import java.util.UUID;
  */
 public class MepinTransactions {
 
-    private static Log log = LogFactory.getLog(MepinTransactions.class);
+    private static final Log log = LogFactory.getLog(MepinTransactions.class);
 
     /**
      * Create the transaction for the Mepin request.

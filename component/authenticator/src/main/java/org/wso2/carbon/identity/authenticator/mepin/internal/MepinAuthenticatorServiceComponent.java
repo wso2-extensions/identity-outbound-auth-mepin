@@ -34,7 +34,7 @@ import java.util.Hashtable;
  */
 public class MepinAuthenticatorServiceComponent {
 
-    private static Log log = LogFactory.getLog(MepinAuthenticatorServiceComponent.class);
+    private static final Log log = LogFactory.getLog(MepinAuthenticatorServiceComponent.class);
 
     public static RealmService getRealmService() {
         return (RealmService) PrivilegedCarbonContext.getThreadLocalCarbonContext()
