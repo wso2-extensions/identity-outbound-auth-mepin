@@ -1,0 +1,14 @@
+{
+    "name": "MePIN",
+    "owner": "WSO2",
+    "category": "Federated authenticator",
+    "documentationUrl": "https://docs.wso2.com/display/ISCONNECTORS/MePIN+Authenticator",
+    "description": "The MePIN authenticator allows you to authenticate a user using MePIN through WSO2 Identity Server. MePIN is a user authentication and transaction authorization solution.",
+    "status": "Active",
+    "labels": [
+        "Token",
+        "Twofactor",
+        "Biometric"
+    ],
+    "releases": []
+}
